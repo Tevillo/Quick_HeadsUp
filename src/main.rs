@@ -48,7 +48,7 @@ impl Future for Delay {
 async fn main() {
     let bytes = String::from_utf8(
         read(Path::new(
-            "/Users/Range/Desktop/heads_up/src/ASOIAF_list.txt",
+            "src/ASOIAF_list.txt",
         ))
         .unwrap(),
     )
