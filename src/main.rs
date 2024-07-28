@@ -1,12 +1,16 @@
+use crossterm::cursor::MoveToPreviousLine;
+use crossterm::{execute, terminal};
+use crossterm::terminal::{window_size, Clear, WindowSize};
 use rand::rngs::ThreadRng;
 use rand::Rng;
 use std::fs::read;
 use std::future::Future;
-use std::io::stdin;
+use std::io::{stdin, stdout};
 use std::path::Path;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::time::{Duration, Instant};
+use crossterm::style::{Color::{Blue,White}, Colors, SetColors};
 
 struct Delay {
     when: Instant,
@@ -24,6 +28,11 @@ impl Future for Delay {
         let s = self.length;
         let picker = self.rng.gen_range(0..s);
         let word = self.word_cloud.get(picker).unwrap();
+        execute!(
+            stdout(),
+            MoveToPreviousLine(3),
+            Clear(terminal::ClearType::FromCursorDown),
+        ).unwrap();
         println!(
             "{}\n{:?} Seconds left",
             word,
@@ -46,27 +55,31 @@ impl Future for Delay {
 
 #[tokio::main]
 async fn main() {
-    let bytes = String::from_utf8(
-        read(Path::new(
-            "src/ASOIAF_list.txt",
-        ))
-        .unwrap(),
-    )
-    .unwrap();
-    let lines = bytes.lines();
     let mut word_cloud: Vec<String> = Vec::new();
-    lines.for_each(|x| word_cloud.push(x.to_string()));
-    let when = Instant::now() + Duration::from_millis(60020); //20 ms added for compute type
-    let rng = rand::thread_rng();
-    let length = word_cloud.len();
+    String::from_utf8(read(Path::new("files/ASOIAF_list.txt")).expect("file not found!"))
+        .expect("Non utf8 symbols found")
+        .lines()
+        .for_each(|word| word_cloud.push(word.to_string()));
     let future = Delay {
-        when,
+        when: Instant::now() + Duration::from_millis(5020), //20 ms added for compute time
+        length: word_cloud.len(),
         score: 0,
         word_cloud,
-        rng,
-        length,
+        rng: rand::thread_rng(),
     };
 
+    let window = match window_size() {
+        Ok(x) => x,
+        Err(_) => WindowSize { rows: 20, columns: 20, width: 400, height: 400 }
+    };
+    execute!(
+        stdout(),
+        terminal::SetTitle("ASOIAF Heads Up"),
+        SetColors(Colors::new(White,Blue)),
+        crossterm::terminal::SetSize(50,20),
+        crossterm::cursor::MoveTo(window.rows / 2, window.columns / 2),
+        Clear(terminal::ClearType::All),
+    ).unwrap();
     let out = future.await;
     println!("{}", out);
 }
