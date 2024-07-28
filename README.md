@@ -4,12 +4,7 @@ V0.1
 
 install rust here [Rust Download](https://www.rust-lang.org/tools/install)
 
-Passage taken from link
-
-"You may need to install the Visual Studio C++ Build tools when prompted to do so. If you are not on Windows see "Other Installation Methods"."
-
-If prompted with an issue involving Visual Studio C++ then install accordingly
-
+If issues with windows appear consult [here](https://rust-lang.github.io/rustup/installation/windows-msvc.html)
 
 
 Then run `rustup toolchain install stable`
