@@ -58,6 +58,7 @@ impl Future for Delay {
                 SetColors(Colors::new(Blue, Black)),
             ).unwrap();
 
+            println!("================================================================================");
             print!("\nYour Score is {}!", self.score);
             Poll::Ready("")
         } else {
@@ -88,11 +89,10 @@ async fn main() {
 
     let window = match window_size() {
         Ok(x) => {
-            println!("--------------------------------------------------");
+            // println!("--------------------------------------------------");
             x
         },
         Err(_) =>{
-            println!("================================================================================");
             WindowSize { rows: 20, columns: 20, width: 400, height: 400 }
         } 
     };
@@ -106,5 +106,6 @@ async fn main() {
         Clear(terminal::ClearType::All),
     ).unwrap();
     let out: &str = future.await;    
+    println!("================================================================================");
     println!("{}", out);
 }
