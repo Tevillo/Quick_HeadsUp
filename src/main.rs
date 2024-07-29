@@ -69,7 +69,10 @@ async fn main() {
     };
 
     let window = match window_size() {
-        Ok(x) => x,
+        Ok(x) => {
+            println!("--------------------------------------------------------------------------------");
+            x
+        },
         Err(_) => WindowSize { rows: 20, columns: 20, width: 400, height: 400 }
     };
     execute!(
