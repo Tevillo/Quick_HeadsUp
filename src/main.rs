@@ -105,7 +105,6 @@ async fn main() {
         crossterm::cursor::MoveTo(window.rows / 2, window.columns / 2),
         Clear(terminal::ClearType::All),
     ).unwrap();
-    let out: &str = future.await;    
-    println!("\n================================================================================");
-    println!("{}", out);
+    let _out: &str = future.await;    
+    println!("\n\n================================================================================");
 }
