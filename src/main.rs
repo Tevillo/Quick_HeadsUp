@@ -10,7 +10,7 @@ use std::path::Path;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::time::{Duration, Instant};
-use crossterm::style::{Color::{Blue,White,Black}, Colors, SetColors};
+use crossterm::style::{Color::{Blue,White,Black,DarkYellow}, Colors, SetColors};
 use clap::Parser;
 
 #[derive(Parser,Debug)]
@@ -27,6 +27,7 @@ struct Delay {
     word_cloud: Vec<String>,
     rng: ThreadRng,
     length: usize,
+    missed_words: String,
 }
 
 impl Future for Delay {
@@ -52,6 +53,8 @@ impl Future for Delay {
         stdin().read_line(&mut val).expect("fail");
         if val.starts_with('y') {
             self.score += 1;
+        } else {
+            self.missed_words.push_str(&format!("{}, ", word));
         }
         if Instant::now() >= self.when {
             execute!(
@@ -59,9 +62,31 @@ impl Future for Delay {
                 LeaveAlternateScreen,
                 SetColors(Colors::new(Blue, Black)),
             ).unwrap();
-
             println!("================================================================================");
-            print!("\nYour Score is {}!", self.score);
+            execute!(
+                stdout(),
+                SetColors(Colors::new(DarkYellow, Black)),
+            ).unwrap();
+
+            println!("\nYour Score is {}!\n", self.score);
+            execute!(
+                stdout(),
+                SetColors(Colors::new(Blue, Black)),
+            ).unwrap();
+            println!("================================================================================");
+            self.missed_words.pop();
+            self.missed_words.pop();
+            println!("\nMissed words:\n");
+            execute!(
+                stdout(),
+                SetColors(Colors::new(DarkYellow, Black)),
+            ).unwrap();
+            println!("{}", self.missed_words);
+            execute!(
+                stdout(),
+                SetColors(Colors::new(Blue, Black)),
+            ).unwrap();
+
             Poll::Ready("")
         } else {
             // Ignore this line for now.
@@ -87,6 +112,7 @@ async fn main() {
         score: 0,
         word_cloud,
         rng: rand::thread_rng(),
+        missed_words: String::new(),
     };
 
     let window = match window_size() {
@@ -107,5 +133,5 @@ async fn main() {
         Clear(terminal::ClearType::All),
     ).unwrap();
     let _out: &str = future.await;    
-    println!("\n\n================================================================================");
+    println!("\n================================================================================");
 }
