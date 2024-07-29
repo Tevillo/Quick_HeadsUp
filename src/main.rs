@@ -87,15 +87,21 @@ async fn main() {
     };
 
     let window = match window_size() {
-        Ok(x) => x,
-        Err(_) => WindowSize { rows: 20, columns: 20, width: 400, height: 400 }
+        Ok(x) => {
+            println!("--------------------------------------------------");
+            x
+        },
+        Err(_) =>{
+            println!("================================================================================");
+            WindowSize { rows: 20, columns: 20, width: 400, height: 400 }
+        } 
     };
     execute!(
         stdout(),
         EnterAlternateScreen,
         terminal::SetTitle("ASOIAF Heads Up"),
         SetColors(Colors::new(White,Blue)),
-        //crossterm::terminal::SetSize(50,20),
+        // crossterm::terminal::SetSize(50,20),
         crossterm::cursor::MoveTo(window.rows / 2, window.columns / 2),
         Clear(terminal::ClearType::All),
     ).unwrap();
