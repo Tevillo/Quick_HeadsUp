@@ -1,4 +1,4 @@
-use crossterm::cursor::MoveToPreviousLine;
+use crossterm::cursor::{MoveToPreviousLine,MoveToNextLine};
 use crossterm::{execute, terminal};
 use crossterm::terminal::{window_size, Clear, EnterAlternateScreen, LeaveAlternateScreen, WindowSize};
 use rand::rngs::ThreadRng;
@@ -10,7 +10,7 @@ use std::path::Path;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::time::{Duration, Instant};
-use crossterm::style::{Color::{Blue,White,Green,Black}, Colors, SetColors};
+use crossterm::style::{Color::{Blue,White,Black}, Colors, SetColors};
 use clap::Parser;
 
 #[derive(Parser,Debug)]
@@ -52,8 +52,15 @@ impl Future for Delay {
             self.score += 1;
         }
         if Instant::now() >= self.when {
-            println!("Score is {}", self.score);
-            Poll::Ready("time is up")
+                execute!(
+                    stdout(),
+                    LeaveAlternateScreen,
+                    SetColors(Colors::new(Blue, Black)),
+                    MoveToNextLine(1),
+                ).unwrap();
+
+            println!("Your Score is {}!", self.score);
+            Poll::Ready("")
         } else {
             // Ignore this line for now.
             cx.waker().wake_by_ref();
@@ -95,13 +102,6 @@ async fn main() {
         crossterm::cursor::MoveTo(window.rows / 2, window.columns / 2),
         Clear(terminal::ClearType::All),
     ).unwrap();
-    let out: &str = future.await;
-    execute!(
-        stdout(),
-        LeaveAlternateScreen,
-        SetColors(Colors::new(Green, Black)),
-        MoveToPreviousLine(3),
-    ).unwrap();
-    
+    let out: &str = future.await;    
     println!("{}", out);
 }
