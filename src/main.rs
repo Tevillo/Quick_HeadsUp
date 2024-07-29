@@ -36,7 +36,9 @@ impl Future for Delay {
         let mut val = String::new();
         let s = self.length;
         let picker = self.rng.gen_range(0..s);
-        let word = self.word_cloud.get(picker).unwrap();
+        let word = self.word_cloud.get(picker).unwrap().clone();
+        self.word_cloud.remove(picker);
+        self.length -= 1;
         execute!(
             stdout(),
             MoveToPreviousLine(3),
@@ -89,7 +91,6 @@ async fn main() {
 
     let window = match window_size() {
         Ok(x) => {
-            // println!("--------------------------------------------------");
             x
         },
         Err(_) =>{
