@@ -1,4 +1,4 @@
-use crossterm::cursor::{MoveToPreviousLine,MoveToNextLine};
+use crossterm::cursor::MoveToPreviousLine;
 use crossterm::{execute, terminal};
 use crossterm::terminal::{window_size, Clear, EnterAlternateScreen, LeaveAlternateScreen, WindowSize};
 use rand::rngs::ThreadRng;
@@ -52,14 +52,13 @@ impl Future for Delay {
             self.score += 1;
         }
         if Instant::now() >= self.when {
-                execute!(
-                    stdout(),
-                    LeaveAlternateScreen,
-                    SetColors(Colors::new(Blue, Black)),
-                    MoveToNextLine(1),
-                ).unwrap();
+            execute!(
+                stdout(),
+                LeaveAlternateScreen,
+                SetColors(Colors::new(Blue, Black)),
+            ).unwrap();
 
-            println!("Your Score is {}!", self.score);
+            print!("\nYour Score is {}!", self.score);
             Poll::Ready("")
         } else {
             // Ignore this line for now.
@@ -88,9 +87,7 @@ async fn main() {
     };
 
     let window = match window_size() {
-        Ok(x) => {
-            x
-        },
+        Ok(x) => x,
         Err(_) => WindowSize { rows: 20, columns: 20, width: 400, height: 400 }
     };
     execute!(
@@ -98,7 +95,7 @@ async fn main() {
         EnterAlternateScreen,
         terminal::SetTitle("ASOIAF Heads Up"),
         SetColors(Colors::new(White,Blue)),
-        crossterm::terminal::SetSize(50,20),
+        //crossterm::terminal::SetSize(50,20),
         crossterm::cursor::MoveTo(window.rows / 2, window.columns / 2),
         Clear(terminal::ClearType::All),
     ).unwrap();
