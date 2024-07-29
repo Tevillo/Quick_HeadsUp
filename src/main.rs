@@ -61,7 +61,7 @@ async fn main() {
         .lines()
         .for_each(|word| word_cloud.push(word.to_string()));
     let future = Delay {
-        when: Instant::now() + Duration::from_millis(5020), //20 ms added for compute time
+        when: Instant::now() + Duration::from_millis(60020), //20 ms added for compute time
         length: word_cloud.len(),
         score: 0,
         word_cloud,
