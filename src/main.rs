@@ -1,6 +1,6 @@
 use crossterm::cursor::MoveToPreviousLine;
 use crossterm::{execute, terminal};
-use crossterm::terminal::{window_size, Clear, WindowSize};
+use crossterm::terminal::{window_size, Clear, EnterAlternateScreen, LeaveAlternateScreen, WindowSize};
 use rand::rngs::ThreadRng;
 use rand::Rng;
 use std::fs::read;
@@ -10,7 +10,16 @@ use std::path::Path;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::time::{Duration, Instant};
-use crossterm::style::{Color::{Blue,White}, Colors, SetColors};
+use crossterm::style::{Color::{Blue,White,Green,Black}, Colors, SetColors};
+use clap::Parser;
+
+#[derive(Parser,Debug)]
+#[command(version, about, long_about = None)]
+struct Args {
+    /// Game length in seconds. default_value is 60 
+    #[arg(short, long, default_value_t = 60)]
+    game_time: u64,
+}
 
 struct Delay {
     when: Instant,
@@ -55,13 +64,16 @@ impl Future for Delay {
 
 #[tokio::main]
 async fn main() {
+    let args = Args::parse();
+
     let mut word_cloud: Vec<String> = Vec::new();
     String::from_utf8(read(Path::new("files/ASOIAF_list.txt")).expect("file not found!"))
         .expect("Non utf8 symbols found")
         .lines()
         .for_each(|word| word_cloud.push(word.to_string()));
+
     let future = Delay {
-        when: Instant::now() + Duration::from_millis(60020), //20 ms added for compute time
+        when: Instant::now() + Duration::from_millis(args.game_time * 1000  + 200), //20 ms added for compute time
         length: word_cloud.len(),
         score: 0,
         word_cloud,
@@ -70,19 +82,26 @@ async fn main() {
 
     let window = match window_size() {
         Ok(x) => {
-            println!("--------------------------------------------------------------------------------");
             x
         },
         Err(_) => WindowSize { rows: 20, columns: 20, width: 400, height: 400 }
     };
     execute!(
         stdout(),
+        EnterAlternateScreen,
         terminal::SetTitle("ASOIAF Heads Up"),
         SetColors(Colors::new(White,Blue)),
         crossterm::terminal::SetSize(50,20),
         crossterm::cursor::MoveTo(window.rows / 2, window.columns / 2),
         Clear(terminal::ClearType::All),
     ).unwrap();
-    let out = future.await;
+    let out: &str = future.await;
+    execute!(
+        stdout(),
+        LeaveAlternateScreen,
+        SetColors(Colors::new(Green, Black)),
+        MoveToPreviousLine(3),
+    ).unwrap();
+    
     println!("{}", out);
 }
