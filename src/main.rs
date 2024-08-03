@@ -123,6 +123,8 @@ impl Future for Delay {
 //[]  Use Bracets or hypens to emphasize questions
 //[]  Visual Feedback of correct or incorrect. Flash screen?
 //[]  Live timer. Tell when last guess
+//[]  Make sure no guesses are repeat
+//[]  Repeat games after
 
 #[tokio::main]
 async fn main() {
