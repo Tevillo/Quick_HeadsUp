@@ -9,4 +9,6 @@ edition = "2021"
 clap = { version = "4.5.11", features = ["derive"] }
 crossterm = "0.27.0"
 rand = "0.8.5"
+rascii_art = "0.4.5"
+term_size = "0.3.2"
 tokio = { version = "1.39.2", features = ["full"] }

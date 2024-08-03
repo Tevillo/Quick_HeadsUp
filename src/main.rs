@@ -1,9 +1,10 @@
-use crossterm::cursor::MoveToPreviousLine;
+use crossterm::cursor::{MoveToPreviousLine, MoveTo, DisableBlinking};
 use crossterm::{execute, terminal};
 use crossterm::terminal::{window_size, Clear, EnterAlternateScreen, LeaveAlternateScreen, WindowSize};
 use rand::rngs::ThreadRng;
 use rand::Rng;
 use std::fs::read;
+use std::thread;
 use std::future::Future;
 use std::io::{stdin, stdout};
 use std::path::Path;
@@ -12,11 +13,14 @@ use std::task::{Context, Poll};
 use std::time::{Duration, Instant};
 use crossterm::style::{Color::{Blue,White,Black,DarkYellow}, Colors, SetColors};
 use clap::Parser;
+use rascii_art::{render_to,RenderOptions,};
+
+const SECOND: Duration = Duration::from_secs(1);
 
 #[derive(Parser,Debug)]
 #[command(version, about, long_about = None)]
 struct Args {
-    /// Game length in seconds. default_value is 60 
+    /// Game length in seconds.
     #[arg(short, long, default_value_t = 60)]
     game_time: u64,
 }
@@ -28,6 +32,7 @@ struct Delay {
     rng: ThreadRng,
     length: usize,
     missed_words: String,
+    middle: (u16,u16),
 }
 
 impl Future for Delay {
@@ -42,14 +47,15 @@ impl Future for Delay {
         self.length -= 1;
         execute!(
             stdout(),
-            MoveToPreviousLine(3),
+            MoveTo(self.middle.0 - (word.len() / 2) as u16,self.middle.1),
             Clear(terminal::ClearType::FromCursorDown),
         ).unwrap();
-        println!(
-            "{}\n{:?} Seconds left",
-            word,
-            (self.when - Instant::now()).as_secs()
-        );
+        println!("{word}");
+        execute!(
+            stdout(),
+            MoveTo(self.middle.0 - 7, self.middle.1 + 1),
+        ).unwrap();
+        println!("{:?} Seconds Left", (self.when - Instant::now()).as_secs());
         stdin().read_line(&mut val).expect("fail");
         if val.starts_with('y') {
             self.score += 1;
@@ -95,7 +101,7 @@ impl Future for Delay {
                 SetColors(Colors::new(Blue, Black)),
             ).unwrap();
 
-            Poll::Ready("")
+            Poll::Ready("\n================================================================================")
         } else {
             // Ignore this line for now.
             cx.waker().wake_by_ref();
@@ -103,6 +109,12 @@ impl Future for Delay {
         }
     }
 }
+//TODO:
+//[]  Make numbers into a square
+//[]  Up font size on questions
+//[]  Use Bracets or hypens to emphasize questions
+//[]  Visual Feedback of correct or incorrect. Flash screen?
+//[]  Live timer. Tell when last guess
 
 #[tokio::main]
 async fn main() {
@@ -114,32 +126,48 @@ async fn main() {
         .lines()
         .for_each(|word| word_cloud.push(word.to_string()));
 
+    let x = term_size::dimensions().unwrap_or((64,64));
+
     let future = Delay {
-        when: Instant::now() + Duration::from_millis(args.game_time * 1000  + 200), //20 ms added for compute time
+        when: Instant::now() + Duration::from_millis(args.game_time * 1000  + 200 + 3000), //200 ms added for compute time and 3 seconds added for countdown
         length: word_cloud.len(),
         score: 0,
         word_cloud,
         rng: rand::thread_rng(),
         missed_words: String::new(),
+        middle: (x.0 as u16 / 2 ,x.1 as u16 / 2),
     };
 
-    let window = match window_size() {
-        Ok(x) => {
-            x
-        },
-        Err(_) =>{
-            WindowSize { rows: 20, columns: 20, width: 400, height: 400 }
-        } 
-    };
     execute!(
         stdout(),
         EnterAlternateScreen,
         terminal::SetTitle("ASOIAF Heads Up"),
         SetColors(Colors::new(White,Blue)),
-        // crossterm::terminal::SetSize(50,20),
-        crossterm::cursor::MoveTo(window.rows / 2, window.columns / 2),
         Clear(terminal::ClearType::All),
     ).unwrap();
-    let _out: &str = future.await;    
-    println!("\n================================================================================");
+
+    setup(future, x).await;
+}
+
+async fn setup(game: Delay, terminal: (usize, usize)) {
+    let row = terminal.0 as u32;
+    let col = terminal.1 as u32;
+    let render = RenderOptions::new().width(row).height(col).charset(&[" ", ".", ",", "-", "*","$", "#"]);
+    execute!(
+        stdout(),
+        DisableBlinking,
+        MoveTo(row as u16 / 2, col as u16 / 2),
+    ).unwrap();
+    for i in (1..=3).rev() {
+        let mut buffer = String::new();
+        render_to(format!("files/{}.png", i), &mut  buffer, &render).unwrap();
+        println!("{buffer}");
+        thread::sleep(SECOND);
+        execute!(
+            stdout(),
+            Clear(terminal::ClearType::All),
+            MoveTo(row as u16 / 2, col as u16 / 2),
+        ).unwrap();
+    }
+    println!("{}", game.await);
 }
