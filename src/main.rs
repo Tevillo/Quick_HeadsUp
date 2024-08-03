@@ -76,12 +76,20 @@ impl Future for Delay {
             println!("================================================================================");
             self.missed_words.pop();
             self.missed_words.pop();
-            println!("\nMissed words:\n");
-            execute!(
-                stdout(),
-                SetColors(Colors::new(DarkYellow, Black)),
-            ).unwrap();
-            println!("{}", self.missed_words);
+            if self.missed_words.len() > 0 {
+                println!("\nMissed words:\n");
+                execute!(
+                    stdout(),
+                    SetColors(Colors::new(DarkYellow, Black)),
+                ).unwrap();
+                println!("{}", self.missed_words);
+            } else {
+                execute!(
+                    stdout(),
+                    SetColors(Colors::new(DarkYellow, Black)),
+                ).unwrap();
+                println!("\nNo Missed words!");
+            }
             execute!(
                 stdout(),
                 SetColors(Colors::new(Blue, Black)),
