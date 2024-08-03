@@ -1,6 +1,6 @@
-use crossterm::cursor::{MoveToPreviousLine, MoveTo, DisableBlinking};
+use crossterm::cursor::{MoveTo, DisableBlinking};
 use crossterm::{execute, terminal};
-use crossterm::terminal::{window_size, Clear, EnterAlternateScreen, LeaveAlternateScreen, WindowSize};
+use crossterm::terminal::{Clear, EnterAlternateScreen, LeaveAlternateScreen};
 use rand::rngs::ThreadRng;
 use rand::Rng;
 use std::fs::read;
