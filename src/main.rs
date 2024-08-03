@@ -1,9 +1,10 @@
-use crossterm::cursor::MoveToPreviousLine;
+use crossterm::cursor::{MoveTo, DisableBlinking};
 use crossterm::{execute, terminal};
-use crossterm::terminal::{window_size, Clear, EnterAlternateScreen, LeaveAlternateScreen, WindowSize};
+use crossterm::terminal::{Clear, EnterAlternateScreen, LeaveAlternateScreen};
 use rand::rngs::ThreadRng;
 use rand::Rng;
 use std::fs::read;
+use std::thread;
 use std::future::Future;
 use std::io::{stdin, stdout};
 use std::path::Path;
@@ -12,13 +13,20 @@ use std::task::{Context, Poll};
 use std::time::{Duration, Instant};
 use crossterm::style::{Color::{Blue,White,Black,DarkYellow}, Colors, SetColors};
 use clap::Parser;
+use rascii_art::{render_to,RenderOptions,};
+
+const SECOND: Duration = Duration::from_secs(1);
 
 #[derive(Parser,Debug)]
 #[command(version, about, long_about = None)]
 struct Args {
-    /// Game length in seconds. default_value is 60 
+    /// Game length in seconds.
     #[arg(short, long, default_value_t = 60)]
     game_time: u64,
+    
+    /// toggle countdown off.
+    #[arg(short, long)]
+    countdown: bool,
 }
 
 struct Delay {
@@ -28,6 +36,7 @@ struct Delay {
     rng: ThreadRng,
     length: usize,
     missed_words: String,
+    middle: (u16,u16),
 }
 
 impl Future for Delay {
@@ -42,14 +51,19 @@ impl Future for Delay {
         self.length -= 1;
         execute!(
             stdout(),
-            MoveToPreviousLine(3),
-            Clear(terminal::ClearType::FromCursorDown),
+            Clear(terminal::ClearType::FromCursorUp),
+            MoveTo(self.middle.0 - (word.len() / 2) as u16,self.middle.1),
         ).unwrap();
-        println!(
-            "{}\n{:?} Seconds left",
-            word,
-            (self.when - Instant::now()).as_secs()
-        );
+        println!("{word}");
+        execute!(
+            stdout(),
+            MoveTo(self.middle.0 - 7, self.middle.1 + 1),
+        ).unwrap();
+        println!("{:?} Seconds Left", (self.when - Instant::now()).as_secs());
+        execute!(
+            stdout(),
+            MoveTo(self.middle.0 , self.middle.1 + 2),
+        ).unwrap();
         stdin().read_line(&mut val).expect("fail");
         if val.starts_with('y') {
             self.score += 1;
@@ -76,7 +90,7 @@ impl Future for Delay {
             println!("================================================================================");
             self.missed_words.pop();
             self.missed_words.pop();
-            if self.missed_words.len() > 0 {
+            if !self.missed_words.is_empty() {
                 println!("\nMissed words:\n");
                 execute!(
                     stdout(),
@@ -95,7 +109,7 @@ impl Future for Delay {
                 SetColors(Colors::new(Blue, Black)),
             ).unwrap();
 
-            Poll::Ready("")
+            Poll::Ready("\n================================================================================")
         } else {
             // Ignore this line for now.
             cx.waker().wake_by_ref();
@@ -103,6 +117,14 @@ impl Future for Delay {
         }
     }
 }
+//TODO:
+//[]  Make numbers into a square
+//[]  Up font size on questions
+//[]  Use Bracets or hypens to emphasize questions
+//[]  Visual Feedback of correct or incorrect. Flash screen?
+//[]  Live timer. Tell when last guess
+//[]  Make sure no guesses are repeat
+//[]  Repeat games after
 
 #[tokio::main]
 async fn main() {
@@ -114,32 +136,54 @@ async fn main() {
         .lines()
         .for_each(|word| word_cloud.push(word.to_string()));
 
+    let terminal_size = term_size::dimensions().unwrap_or((64,64));
+    let time = match args.countdown {
+        false => Instant::now() + Duration::from_millis(args.game_time * 1000 + 3200),
+        true => Instant::now() + Duration::from_millis(args.game_time * 1000 + 200),
+    };
     let future = Delay {
-        when: Instant::now() + Duration::from_millis(args.game_time * 1000  + 200), //20 ms added for compute time
+        when: time,
         length: word_cloud.len(),
         score: 0,
         word_cloud,
         rng: rand::thread_rng(),
         missed_words: String::new(),
+        middle: (terminal_size.0 as u16 / 2 ,terminal_size.1 as u16 / 2),
     };
 
-    let window = match window_size() {
-        Ok(x) => {
-            x
-        },
-        Err(_) =>{
-            WindowSize { rows: 20, columns: 20, width: 400, height: 400 }
-        } 
-    };
     execute!(
         stdout(),
         EnterAlternateScreen,
         terminal::SetTitle("ASOIAF Heads Up"),
         SetColors(Colors::new(White,Blue)),
-        // crossterm::terminal::SetSize(50,20),
-        crossterm::cursor::MoveTo(window.rows / 2, window.columns / 2),
         Clear(terminal::ClearType::All),
     ).unwrap();
-    let _out: &str = future.await;    
-    println!("\n================================================================================");
+
+    match args.countdown {
+        false => setup(future, terminal_size).await,
+        true => println!("{}",future.await),
+    }
+}
+
+async fn setup(game: Delay, terminal: (usize, usize)) {
+    let row = terminal.0 as u32;
+    let col = terminal.1 as u32;
+    let render = RenderOptions::new().width(row).height(col).charset(&[" ", ".", ",", "-", "*","$", "#"]);
+    execute!(
+        stdout(),
+        DisableBlinking,
+        MoveTo(row as u16 / 2, col as u16 / 2),
+    ).unwrap();
+    for i in (1..=3).rev() {
+        let mut buffer = String::new();
+        render_to(format!("files/{}.png", i), &mut  buffer, &render).unwrap();
+        println!("{buffer}");
+        thread::sleep(SECOND);
+        execute!(
+            stdout(),
+            Clear(terminal::ClearType::All),
+            MoveTo(row as u16 / 2, col as u16 / 2),
+        ).unwrap();
+    }
+    println!("{}", game.await);
 }
