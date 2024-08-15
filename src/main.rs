@@ -118,14 +118,16 @@ impl Future for Delay {
     }
 }
 //TODO:
-//[]  Make numbers into a square
-//[]  Up font size on questions
-//[]  Use Bracets or hypens to emphasize questions
-//[]  Visual Feedback of correct or incorrect. Flash screen?
-//[]  Live timer. Tell when last guess
-//[]  Make sure no guesses are repeat
-//[]  Repeat games after
-//[]  Check out terminal_size for parker brown
+//[ ]  Make numbers into a square
+//[ ]  Up font size on questions
+//[ ]  Use Bracets or hypens to emphasize questions
+//[ ]  Visual Feedback of correct or incorrect. Flash screen?
+//[ ]  Live timer. Tell when last guess
+//[x]  Make sure no guesses are repeat
+//[ ]  Make sure no guesses are repeat over multiple games
+//[ ]  Repeat games after
+//[ ]  Check out terminal_size for parker brown
+//[ ]  Seperate by category
 
 #[tokio::main]
 async fn main() {
@@ -157,6 +159,7 @@ async fn main() {
         EnterAlternateScreen,
         terminal::SetTitle("ASOIAF Heads Up"),
         SetColors(Colors::new(White,Blue)),
+        DisableBlinking,
         Clear(terminal::ClearType::All),
     ).unwrap();
 
@@ -167,23 +170,22 @@ async fn main() {
 }
 
 async fn setup(game: Delay, terminal: (usize, usize)) {
-    let row = terminal.0 as u32;
-    let col = terminal.1 as u32;
-    let render = RenderOptions::new().width(row).height(col).charset(&[" ", ".", ",", "-", "*","$", "#"]);
-    execute!(
-        stdout(),
-        DisableBlinking,
-        MoveTo(row as u16 / 2, col as u16 / 2),
-    ).unwrap();
+    let sqr = std::cmp::min(terminal.0, terminal.1) as u32;
+    let diff = terminal.0.checked_sub(terminal.1);
+    let render = RenderOptions::new().width(sqr).height(sqr).charset(&[" ", ".", ",", "-", "*","$", "#"]);
     for i in (1..=3).rev() {
         let mut buffer = String::new();
-        render_to(format!("files/{}.png", i), &mut  buffer, &render).unwrap();
-        println!("{buffer}");
+        render_to(format!("files/{}_skinny.png", i), &mut  buffer, &render).unwrap();
+        match diff {
+            Some(x) => {
+                let blank_space = String::from_utf8(vec![32; x / 2]).unwrap();
+                buffer.lines().for_each(|x| println!("{}{}{}", blank_space.clone(), x, blank_space.clone()));
+            },
+            None => println!("{buffer}"),
+        }
         thread::sleep(SECOND);
         execute!(
             stdout(),
-            Clear(terminal::ClearType::All),
-            MoveTo(row as u16 / 2, col as u16 / 2),
         ).unwrap();
     }
     println!("{}", game.await);
