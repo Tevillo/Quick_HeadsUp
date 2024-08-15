@@ -125,6 +125,7 @@ impl Future for Delay {
 //[]  Live timer. Tell when last guess
 //[]  Make sure no guesses are repeat
 //[]  Repeat games after
+//[]  Check out terminal_size for parker brown
 
 #[tokio::main]
 async fn main() {
@@ -138,8 +139,8 @@ async fn main() {
 
     let terminal_size = term_size::dimensions().unwrap_or((64,64));
     let time = match args.countdown {
-        false => Instant::now() + Duration::from_millis(args.game_time * 1000 + 3200),
-        true => Instant::now() + Duration::from_millis(args.game_time * 1000 + 200),
+        false => Instant::now() + Duration::from_millis(args.game_time * 1000 + 3400),
+        true => Instant::now() + Duration::from_millis(args.game_time * 1000 + 400),
     };
     let future = Delay {
         when: time,
