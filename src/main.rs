@@ -11,7 +11,7 @@ use std::path::Path;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::time::{Duration, Instant};
-use crossterm::style::{Color::{Blue,White,Black,DarkYellow}, Colors, SetColors};
+use crossterm::style::{Color::{Blue,White,Black,DarkYellow, Green, Red}, Colors, SetColors};
 use clap::Parser;
 use rascii_art::{render_to,RenderOptions,};
 
@@ -51,8 +51,9 @@ impl Future for Delay {
         self.length -= 1;
         execute!(
             stdout(),
-            Clear(terminal::ClearType::FromCursorUp),
+            Clear(terminal::ClearType::All),
             MoveTo(self.middle.0 - (word.len() / 2) as u16,self.middle.1),
+            //SetColors(Colors::new(White, Blue)),
         ).unwrap();
         println!("{word}");
         execute!(
@@ -67,48 +68,15 @@ impl Future for Delay {
         stdin().read_line(&mut val).expect("fail");
         if val.starts_with('y') {
             self.score += 1;
+            thread::spawn(|| flash_color(Green));
+            //flash_color(Green);
         } else {
             self.missed_words.push_str(&format!("{}, ", word));
+            thread::spawn(|| flash_color(Red));
+            //flash_color(Red);
         }
         if Instant::now() >= self.when {
-            execute!(
-                stdout(),
-                LeaveAlternateScreen,
-                SetColors(Colors::new(Blue, Black)),
-            ).unwrap();
-            println!("================================================================================");
-            execute!(
-                stdout(),
-                SetColors(Colors::new(DarkYellow, Black)),
-            ).unwrap();
-
-            println!("\nYour Score is {}!\n", self.score);
-            execute!(
-                stdout(),
-                SetColors(Colors::new(Blue, Black)),
-            ).unwrap();
-            println!("================================================================================");
-            self.missed_words.pop();
-            self.missed_words.pop();
-            if !self.missed_words.is_empty() {
-                println!("\nMissed words:\n");
-                execute!(
-                    stdout(),
-                    SetColors(Colors::new(DarkYellow, Black)),
-                ).unwrap();
-                println!("{}", self.missed_words);
-            } else {
-                execute!(
-                    stdout(),
-                    SetColors(Colors::new(DarkYellow, Black)),
-                ).unwrap();
-                println!("\nNo Missed words!");
-            }
-            execute!(
-                stdout(),
-                SetColors(Colors::new(Blue, Black)),
-            ).unwrap();
-
+            print_output(self.score, &mut self.missed_words);
             Poll::Ready("\n================================================================================")
         } else {
             // Ignore this line for now.
@@ -117,8 +85,24 @@ impl Future for Delay {
         }
     }
 }
+
+pub async fn flash_color(color: crossterm::style::Color) {
+    execute!(
+        stdout(),
+        SetColors(Colors::new(Black, color)),
+        Clear(terminal::ClearType::All),
+    ).unwrap();
+    thread::sleep(SECOND);
+    execute!(
+        stdout(),
+        SetColors(Colors::new(White,Blue)),
+        Clear(terminal::ClearType::All),
+    ).unwrap();
+
+}
+
 //TODO:
-//[ ]  Make numbers into a square
+//[x]  Make numbers into a square
 //[ ]  Up font size on questions
 //[ ]  Use Bracets or hypens to emphasize questions
 //[ ]  Visual Feedback of correct or incorrect. Flash screen?
@@ -189,4 +173,44 @@ async fn setup(game: Delay, terminal: (usize, usize)) {
         ).unwrap();
     }
     println!("{}", game.await);
+}
+
+fn print_output(score: usize, missed_words: &mut String) {
+    execute!(
+        stdout(),
+        LeaveAlternateScreen,
+        SetColors(Colors::new(Blue, Black)),
+    ).unwrap();
+    println!("================================================================================");
+    execute!(
+        stdout(),
+        SetColors(Colors::new(DarkYellow, Black)),
+    ).unwrap();
+
+    println!("\nYour Score is {}!\n", score);
+    execute!(
+        stdout(),
+        SetColors(Colors::new(Blue, Black)),
+    ).unwrap();
+    println!("================================================================================");
+    missed_words.pop();
+    missed_words.pop();
+    if !missed_words.is_empty() {
+        println!("\nMissed words:\n");
+        execute!(
+            stdout(),
+            SetColors(Colors::new(DarkYellow, Black)),
+        ).unwrap();
+        println!("{}", missed_words);
+    } else {
+        execute!(
+            stdout(),
+            SetColors(Colors::new(DarkYellow, Black)),
+        ).unwrap();
+        println!("\nNo Missed words!");
+    }
+    execute!(
+        stdout(),
+        SetColors(Colors::new(Blue, Black)),
+    ).unwrap();
 }
