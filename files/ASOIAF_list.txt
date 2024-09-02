@@ -1,330 +1,330 @@
 ﻿Rickard Stark
-Ned Stark
-Catelyn Stark
+ Ned Stark
+ Catelyn Stark
 Robb Stark
-Sansa Stark
+ Sansa Stark
 Arya Stark
 Bran Stark
 Rickon Stark
 Jon Snow
 Benjen Stark
 Lyanna Stark
-Tytos Lannister
-Tywin Lannister
+ Tytos Lannister
+ Tywin Lannister
 Joanna Lannister
-Kevan Lannister
+ Kevan Lannister
 Gerion Lannister
-Jamie Lannister
+ Jamie Lannister
 Tyrion Lannister
 Lancel Lannister
 Cersei Lannister
 Robert Baratheon
-Stannis Baratheon
-Renly Baratheon
-Joffrey Baratheon
+ Stannis Baratheon
+ Renly Baratheon
+ Joffrey Baratheon
 Tommen Baratheon
 Myrcella Baratheon
-Shireen Baratheon
-Edric Storm
-Gendry 
-Olenna Tyrell
-Mace Tyrell
+ Shireen Baratheon
+ Edric Storm
+ Gendry 
+ Olenna Tyrell
+ Mace Tyrell
 Margery Tyrell
 Loras Tyrell
-Willis Tyrell
-Garlan Tyrell
+ Willis Tyrell
+ Garlan Tyrell
 Hoster Tully
 Edmure Tully
-The Blackfish
+ The Blackfish
 Oberyn Martell
-Doran Martell
-Arianne Martell
+ Doran Martell
+ Arianne Martell
 Ellaria Sand
 Elia Martell
-Balon Greyjoy
+ Balon Greyjoy
 Asha Greyjoy
-Theon Greyjoy
-Euron Greyjoy
-Victarion Greyjoy
-Aeron Greyjoy (damp hair)
-Daenerys Targaryen 
+ Theon Greyjoy
+ Euron Greyjoy
+ Victarion Greyjoy
+ Aeron Greyjoy (damp hair)
+ Daenerys Targaryen 
 Khal Drogo
 Aerys Targaryen 
 Viserys Targaryen 
-Rhaegar Targaryen
+ Rhaegar Targaryen
 Aegon IV
-Aegon I
+ Aegon I
 Rhaenyra Targaryen
 Daemon Targaryen
 Aemond Targaryen
-Aemon Targaryen (maester)
+ Aemon Targaryen (maester)
 Sandor Clegane
 Gregor Clegane
 Roose Bolton
-Ramsey Bolton
+ Ramsey Bolton
 Reek
 Greatjon Umber
 Rickard Karstark
-Maege Mormont
+ Maege Mormont
 Lyanna Mormont
 Wyman Manderly
-Walder Frey
+ Walder Frey
 Roselyn Frey
-Fat Walda
+ Fat Walda
 Cleos Frey
-Samwell Tarly
-Randall Tarly
+ Samwell Tarly
+ Randall Tarly
 Dickon Tarly
-Varys
-Illyrio Mopatis
-Littlefinger 
-Maester Pycelle
-Qyburn 
+ Varys
+ Illyrio Mopatis
+ Littlefinger 
+ Maester Pycelle
+ Qyburn 
 Brynden Rivers
-Bittersteel
-Arthur Dayne 
-Young Griff
+ Bittersteel
+ Arthur Dayne 
+ Young Griff
 Alicent Hightower 
 Hotpie
-Duncan the Tall
+ Duncan the Tall
 Brienne of Tarth
-Nimble dick
+ Nimble dick
 Duck
-Penny
+ Penny
 Vargo Hoat
 Barristan Selmy 
-Meryn Trant
+ Meryn Trant
 Mandon Moore
-Podrick Payne
-Illyn Payne
-Jorah Mormont
+ Podrick Payne
+ Illyn Payne
+ Jorah Mormont
 Davos Seaworth
-Polliver 
-The Tickler
-Hodor
+ Polliver 
+ The Tickler
+ Hodor
 Bronn 
-Jon Arryn
+ Jon Arryn
 Lysa Arryn
-Robin Arryn
-Axel Florent 
-Selyse Florent 
-Patchface
+ Robin Arryn
+ Axel Florent 
+ Selyse Florent 
+ Patchface
 Jeyne Pool
 Rodrick Cassel
-Timett 
-Thoros 
+ Timett 
+ Thoros 
 Berric Dondarian
-Anguy
+ Anguy
 Mirri Maz Duur
 Xaro Xhoan Daxos
-Pyat Pree
+ Pyat Pree
 Quaithe 
 Shiera Seastar
-Kraznys mo Naklos
+ Kraznys mo Naklos
 Daario Naharis
-Missandei
-Grey Worm
-Whitebeard 
-Strong Belwas
+ Missandei
+ Grey Worm
+ Whitebeard 
+ Strong Belwas
 Jeyne Westerling
-Hizdahr zo Loraq 
+ Hizdahr zo Loraq 
 Tysha 
-Syrio Forel
+ Syrio Forel
 Jaqen H’ghar
 Howland Reed
 Jojen Reed
 Meera Reed
 The High Sparrow
-Coldhands
-Maester Luwin
-Maester Cressen
+ Coldhands
+ Maester Luwin
+ Maester Cressen
 Melisandre
 Bran the Builder
 Alliser Thorne
-Bowen Marsh
+ Bowen Marsh
 Jeor Mormont
 Dolorous Edd
 Grenn 
 Pyp 
-Craster
+ Craster
 Gilly 
-Val
-Varomyr six skins
-Rattleshirt
-Magnar of Thenn
+ Val
+ Varomyr six skins
+ Rattleshirt
+ Magnar of Thenn
 Orell 
 Mance Rayder
-Ygritte
-Shae 
+ Ygritte
+ Shae 
 Tormund Giantsbane
-The Valaryons
-Egg
+ The Valaryons
+ Egg
 Saladhor Saan 
 Qhorin Halfand
 Battle of the Blackwater
-Widows Wail
+ Widows Wail
 Oathkeeper
 Darksister
-Ice
-Heartsbane 
+ Ice
+ Heartsbane 
 Dawn
 Longclaw
 Brightroar
 Westeros
 Dorne 
-The Reach
-The Westerlands
+ The Reach
+ The Westerlands
 The Stormlands
 The Crownlands
-The North
+ The North
 The Riverlands
 The Eyrie 
-The Arbor
+ The Arbor
 The Neck
 The Iron Islands
-Bear Island
+ Bear Island
 The Frostfangs
-Land of Always Winter
+ Land of Always Winter
 Lands of Always Summer
 Sapphire Isles
-Skagos 
+ Skagos 
 Essos & More
 The Disputed Lands
 The Stepstones
 The Dothraki Sea
-The Red Waste
-The 5 Forts
-Ib 
+ The Red Waste
+ The 5 Forts
+ Ib 
 The Summer Isles
-Naarth 
+ Naarth 
 Sothoryos 
-Toad Isle
-The Second Sons
-The Unsullied
+ Toad Isle
+ The Second Sons
+ The Unsullied
 The Brave Companions
-The Brotherhood Without Banners
+ The Brotherhood Without Banners
 The Golden Company
-The Iron Bank
-Sons of the Harpy
-The fist of the first men
+ The Iron Bank
+ Sons of the Harpy
+ The fist of the first men
 Craster's keep
 The gods eye
-The Trident
+ The Trident
 The Wall
 Summerhall
 High Heart
-The Milkwater
+ The Milkwater
 The House of the Undying
 The House of Black & White
 Sept of Baelor
 The Red Keep
-Jojen Paste
-R+L=J
-HR=HS
+ Jojen Paste
+ R+L=J
+ HR=HS
 Clegane Bowl
 Varus is a woman
-Knight of the Laughing Tree
-Bolt-On
-Robert Strong
+ Knight of the Laughing Tree
+ Bolt-On
+ Robert Strong
 Westeros
 Winterfell
-Casterly Rock
-High Garden
-Kings Landing
-The Twins
+ Casterly Rock
+ High Garden
+ Kings Landing
+ The Twins
 Riverrun
-Karhold
-The Dreadfort
-Harrenhal
+ Karhold
+ The Dreadfort
+ Harrenhal
 Sunspear
 Starfall
-Last Hearth
-Moat Cailin
+ Last Hearth
+ Moat Cailin
 Deepwood Motte
 Lannisport
-Dragonstone
+ Dragonstone
 Storms End
 Castle Black
 Eastwatch 
 The Shadow Tower
 Hardhome
-Mole’s Town
+ Mole’s Town
 Torrhen’s square
 White Harbor
-Greywater Watch
-Pyke 
+ Greywater Watch
+ Pyke 
 Acorn Hall
-Horn Hill
-Oldtown
-Essos
+ Horn Hill
+ Oldtown
+ Essos
 Bravos
 Pentos
 Myr 
-Tyrosh 
-Lys
+ Tyrosh 
+ Lys
 Astapor 
-Yunkai 
-Mereen 
+ Yunkai 
+ Mereen 
 Volantis
 New Ghis
-Vaes Dorthrak
+ Vaes Dorthrak
 Qarth 
 Qohor 
 Lorath
-Valyria
-Yeen 
-Yi Ti
+ Valyria
+ Yeen 
+ Yi Ti
 Asshai
-The Moon Door
+ The Moon Door
 The Night Fort
 The Night’s King
 The Rat Cook
-Azor Ahai
-The Drowned God
-R’hllor
+ Azor Ahai
+ The Drowned God
+ R’hllor
 Faith of the Seven
 The Old Gods
-Varys is a Merman
-Janos Slynt
+ Varys is a Merman
+ Janos Slynt
 Donal Noye
 Mag the Mighty
-Cotter Pyke
+ Cotter Pyke
 Jon Connington
-Denys Mallister
+ Denys Mallister
 Black Walder
 Quentyn Ball
-The Gravedigger
+ The Gravedigger
 Pate
-The Alchemist
+ The Alchemist
 Areo Hotah
-Arys Oakheart
+ Arys Oakheart
 Osmund Kettleblack
 Moon Boy
 Dontos Hollard
 Nestor Royce
-Aurane Waters
-Amory Lorch
+ Aurane Waters
+ Amory Lorch
 Summer
-Ghost
-Shaggydog
-Grey Wind
-Nymeria
+ Ghost
+ Shaggydog
+ Grey Wind
+ Nymeria
 Lady
-Marwyn the Mage
-Lyonel Strong
-Corlys Velaryon
-The Dusky Woman
+ Marwyn the Mage
+ Lyonel Strong
+ Corlys Velaryon
+ The Dusky Woman
 Lothor Brune
-Hyle Hunt
+ Hyle Hunt
 Saltpans
 Barbrey Dustin
 Lightbringer
 Lem LemonCloak
 Arbor Gold
-Dornish Red
-Hippocras
-Dreamwine
-Milk of the Poppy
+ Dornish Red
+ Hippocras
+ Dreamwine
+ Milk of the Poppy
 Shade of the Evening
 The Stinking Goose
 The Smiling Knight
@@ -332,32 +332,32 @@ Maelys the Monstrous
 Daemon Blackfyre
 Maegor the Cruel
 Aegon II
-The Shrouded Lord
-Penny
+ The Shrouded Lord
+ Penny
 Septa Lamore
-Gerris Drinkwater
+ Gerris Drinkwater
 Oppo
-Haldon Half-Maester
-Moqorro
+ Haldon Half-Maester
+ Moqorro
 Leathers
-Lollys Stokeworth
-Tyrion Stokeworth
+ Lollys Stokeworth
+ Tyrion Stokeworth
 Rhaeger Frey
 Rodrick The Reader
 The Waif
 Viseryon
-Rhaegal
+ Rhaegal
 Drogon
-Sunfyre
-Caraxes
+ Sunfyre
+ Caraxes
 Vhagar
 Seasmoke
 Cannibal
-Dreamfyre
+ Dreamfyre
 Sheepstealer
 Meleys
-Syrax
-Vermithor
+ Syrax
+ Vermithor
 Moondancer
 Vermax
 Alice Karstark
