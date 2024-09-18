@@ -45,17 +45,6 @@ struct Delay {
     missed_words: String,
     middle: (u16, u16),
 }
-/*
-        //let word = loop_word(s, self.rng.clone(), self.word_cloud.clone());
-fn loop_word(s: usize, mut rng: ThreadRng, word_cloud: Vec<String>) -> String {
-    loop {
-        let picker = rng.gen_range(0..s);
-        let word = word_cloud.get(picker).unwrap().clone();
-        if word.len() == 14 {
-            return word.clone();
-        }
-    }
-}*/
 
 impl Future for Delay {
     type Output = &'static str;
@@ -125,11 +114,18 @@ impl Future for Delay {
         execute!(stdout(), MoveTo(self.middle.0 - 9, self.middle.1 + 3),).unwrap();
         //4
         println!("└――――――――――――――――――┘");
+        execute!(
+            stdout(),
+            MoveTo(self.middle.0, self.middle.1 + 4),
+            //SetColors(Colors::new(White, Blue)),
+        ).unwrap();
         stdin().read_line(&mut val).expect("fail");
         if val.starts_with('y') {
             self.score += 1;
             //thread::spawn(|| flash_color(Green));
             //flash_color(Green);
+        } else if val.starts_with('q') {
+            self.when = Instant::now();
         } else {
             self.missed_words.push_str(&format!("{}, ", word));
             //thread::spawn(|| flash_color(Red));
