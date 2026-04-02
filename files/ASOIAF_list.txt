@@ -1,0 +1,420 @@
+[House Stark]
+Rickard Stark
+Ned Stark
+Catelyn Stark
+Robb Stark
+Sansa Stark
+Arya Stark
+Bran Stark
+Rickon Stark
+Jon Snow
+Benjen Stark
+Lyanna Stark
+
+[House Lannister]
+Tytos Lannister
+Tywin Lannister
+Joanna Lannister
+Kevan Lannister
+Gerion Lannister
+Jamie Lannister
+Tyrion Lannister
+Lancel Lannister
+Cersei Lannister
+
+[House Baratheon]
+Robert Baratheon
+Stannis Baratheon
+Renly Baratheon
+Joffrey Baratheon
+Tommen Baratheon
+Myrcella Baratheon
+Shireen Baratheon
+Edric Storm
+Gendry
+
+[House Tyrell]
+Olenna Tyrell
+Mace Tyrell
+Margery Tyrell
+Loras Tyrell
+Willis Tyrell
+Garlan Tyrell
+
+[House Tully]
+Hoster Tully
+Edmure Tully
+The Blackfish
+
+[House Martell]
+Oberyn Martell
+Doran Martell
+Arianne Martell
+Ellaria Sand
+Elia Martell
+
+[House Greyjoy]
+Balon Greyjoy
+Asha Greyjoy
+Theon Greyjoy
+Euron Greyjoy
+Victarion Greyjoy
+Aeron Greyjoy (damp hair)
+
+[House Targaryen]
+Daenerys Targaryen
+Khal Drogo
+Aerys Targaryen
+Viserys Targaryen
+Rhaegar Targaryen
+Aegon IV
+Aegon I
+Rhaenyra Targaryen
+Daemon Targaryen
+Aemond Targaryen
+Aemon Targaryen (maester)
+Aegon II
+Maegor the Cruel
+
+[House Bolton]
+Roose Bolton
+Ramsey Bolton
+Reek
+
+[Northern Houses]
+Greatjon Umber
+Rickard Karstark
+Maege Mormont
+Lyanna Mormont
+Wyman Manderly
+Alice Karstark
+Barbrey Dustin
+
+[House Frey]
+Walder Frey
+Roselyn Frey
+Fat Walda
+Cleos Frey
+Black Walder
+Rhaeger Frey
+
+[House Tarly]
+Samwell Tarly
+Randall Tarly
+Dickon Tarly
+
+[Kingsguard & Knights]
+Barristan Selmy
+Meryn Trant
+Mandon Moore
+Arys Oakheart
+Osmund Kettleblack
+Arthur Dayne
+Duncan the Tall
+Brienne of Tarth
+The Smiling Knight
+The Gravedigger
+
+[Small Council & Spies]
+Varys
+Illyrio Mopatis
+Littlefinger
+Maester Pycelle
+Qyburn
+
+[Night's Watch]
+Alliser Thorne
+Bowen Marsh
+Jeor Mormont
+Dolorous Edd
+Grenn
+Pyp
+Qhorin Halfand
+Janos Slynt
+Donal Noye
+Cotter Pyke
+Denys Mallister
+
+[Wildlings]
+Craster
+Gilly
+Val
+Varomyr six skins
+Rattleshirt
+Magnar of Thenn
+Orell
+Mance Rayder
+Ygritte
+Tormund Giantsbane
+Mag the Mighty
+
+[Brotherhood Without Banners]
+Thoros
+Berric Dondarian
+Anguy
+Lem LemonCloak
+
+[Essos Characters]
+Mirri Maz Duur
+Xaro Xhoan Daxos
+Pyat Pree
+Quaithe
+Kraznys mo Naklos
+Daario Naharis
+Missandei
+Grey Worm
+Whitebeard
+Strong Belwas
+Hizdahr zo Loraq
+Syrio Forel
+Jaqen H'ghar
+Salladhor Saan
+Pate
+The Alchemist
+
+[Crannogmen]
+Howland Reed
+Jojen Reed
+Meera Reed
+
+[Religion]
+The High Sparrow
+Melisandre
+Azor Ahai
+The Drowned God
+R'hllor
+Faith of the Seven
+The Old Gods
+Moqorro
+
+[Historical & Legendary]
+Bran the Builder
+Brynden Rivers
+Bittersteel
+Shiera Seastar
+Coldhands
+The Night's King
+The Rat Cook
+Quentyn Ball
+Daemon Blackfyre
+Maelys the Monstrous
+Lyonel Strong
+Corlys Velaryon
+Alicent Hightower
+
+[Miscellaneous Characters]
+Sandor Clegane
+Gregor Clegane
+Podrick Payne
+Illyn Payne
+Jorah Mormont
+Davos Seaworth
+Polliver
+The Tickler
+Hodor
+Bronn
+Jon Arryn
+Lysa Arryn
+Robin Arryn
+Axel Florent
+Selyse Florent
+Patchface
+Jeyne Pool
+Rodrick Cassel
+Timett
+Nimble dick
+Duck
+Penny
+Vargo Hoat
+Jeyne Westerling
+Tysha
+Maester Luwin
+Maester Cressen
+Hotpie
+Young Griff
+Jon Connington
+Moon Boy
+Dontos Hollard
+Nestor Royce
+Aurane Waters
+Amory Lorch
+Marwyn the Mage
+The Dusky Woman
+Lothor Brune
+Hyle Hunt
+Rodrick The Reader
+The Waif
+Areo Hotah
+Robert Strong
+Lollys Stokeworth
+Leathers
+Septa Lamore
+Gerris Drinkwater
+Oppo
+Haldon Half-Maester
+
+[Direwolves]
+Summer
+Ghost
+Shaggydog
+Grey Wind
+Nymeria
+Lady
+
+[Dragons]
+Viseryon
+Rhaegal
+Drogon
+Sunfyre
+Caraxes
+Vhagar
+Seasmoke
+Cannibal
+Dreamfyre
+Sheepstealer
+Meleys
+Syrax
+Vermithor
+Moondancer
+Vermax
+
+[Valyrian Steel & Weapons]
+Widows Wail
+Oathkeeper
+Darksister
+Ice
+Heartsbane
+Dawn
+Longclaw
+Brightroar
+Lightbringer
+
+[Regions of Westeros]
+Westeros
+Dorne
+The Reach
+The Westerlands
+The Stormlands
+The Crownlands
+The North
+The Riverlands
+The Iron Islands
+
+[Castles & Strongholds]
+Winterfell
+Casterly Rock
+High Garden
+Kings Landing
+The Twins
+Riverrun
+Karhold
+The Dreadfort
+Harrenhal
+Sunspear
+Starfall
+Last Hearth
+Moat Cailin
+Deepwood Motte
+Lannisport
+Dragonstone
+Storms End
+Castle Black
+Eastwatch
+The Shadow Tower
+The Eyrie
+Acorn Hall
+Horn Hill
+Oldtown
+Pyke
+The Night Fort
+Summerhall
+The Red Keep
+Craster's keep
+Saltpans
+
+[Notable Places]
+The Arbor
+The Neck
+Bear Island
+The Frostfangs
+Land of Always Winter
+Lands of Always Summer
+Sapphire Isles
+Skagos
+The Disputed Lands
+The Stepstones
+The Dothraki Sea
+The Red Waste
+The 5 Forts
+The Summer Isles
+Naarth
+Sothoryos
+Toad Isle
+The fist of the first men
+The gods eye
+The Trident
+The Wall
+High Heart
+The Milkwater
+The House of the Undying
+The House of Black & White
+Sept of Baelor
+Hardhome
+Mole's Town
+Torrhen's square
+White Harbor
+Greywater Watch
+The Moon Door
+
+[Cities of Essos]
+Essos
+Bravos
+Pentos
+Myr
+Tyrosh
+Lys
+Astapor
+Yunkai
+Mereen
+Volantis
+New Ghis
+Vaes Dorthrak
+Qarth
+Qohor
+Lorath
+Valyria
+Yeen
+Yi Ti
+Asshai
+Ib
+
+[Organizations]
+The Valaryons
+The Second Sons
+The Unsullied
+The Brave Companions
+The Brotherhood Without Banners
+The Golden Company
+The Iron Bank
+Sons of the Harpy
+
+[Drinks]
+Arbor Gold
+Dornish Red
+Hippocras
+Dreamwine
+Milk of the Poppy
+Shade of the Evening
+The Stinking Goose
+
+[Theories & Tinfoil]
+Jojen Paste
+R+L=J
+HR=HS
+Clegane Bowl
+Varus is a woman
+Knight of the Laughing Tree
+Bolt-On
+Varys is a Merman
+Egg
+Battle of the Blackwater
