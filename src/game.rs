@@ -112,12 +112,7 @@ pub async fn run_game(
             GameEvent::TimerTick(remaining) => {
                 state.seconds_left = remaining;
                 if let Some(word) = state.current_word() {
-                    render::render_question(
-                        word,
-                        state.seconds_left,
-                        state.score,
-                        state.term_size,
-                    );
+                    render::render_question(word, state.seconds_left, state.score, state.term_size);
                 }
             }
             GameEvent::TimerExpired => {
@@ -151,12 +146,7 @@ pub async fn run_game(
             }
             GameEvent::Redraw => {
                 if let Some(word) = state.current_word() {
-                    render::render_question(
-                        word,
-                        state.seconds_left,
-                        state.score,
-                        state.term_size,
-                    );
+                    render::render_question(word, state.seconds_left, state.score, state.term_size);
                 }
             }
         }
