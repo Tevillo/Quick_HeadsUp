@@ -11,7 +11,10 @@ use std::path::Path;
 use types::*;
 
 #[derive(Parser, Debug)]
-#[command(version, about = "ASOIAF Heads Up! — A Song of Ice and Fire themed party game")]
+#[command(
+    version,
+    about = "ASOIAF Heads Up! — A Song of Ice and Fire themed party game"
+)]
 struct Args {
     /// Game length in seconds
     #[arg(short, long, default_value_t = 60)]
@@ -82,7 +85,10 @@ async fn main() {
 
     let words = load_words(&args.word_file, args.category.as_deref());
     if words.is_empty() {
-        eprintln!("No words found in '{}' (category: {:?})", args.word_file, args.category);
+        eprintln!(
+            "No words found in '{}' (category: {:?})",
+            args.word_file, args.category
+        );
         std::process::exit(1);
     }
 

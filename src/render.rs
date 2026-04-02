@@ -77,11 +77,7 @@ pub fn render_question_unlimited(word: &str, score: usize, term_size: (u16, u16)
 
     let status_line = "LAST QUESTION — No Time Limit";
     let score_line = format!("Score: {}", score);
-    let content_width = word
-        .len()
-        .max(status_line.len())
-        .max(score_line.len())
-        + 4;
+    let content_width = word.len().max(status_line.len()).max(score_line.len()) + 4;
     let box_top: String = "―".repeat(content_width - 2);
     let word_padded = format!("{:^width$}", word, width = content_width - 4);
     let status_padded = format!("{:^width$}", status_line, width = content_width - 4);
@@ -154,14 +150,7 @@ fn big_digit(n: u8) -> &'static [&'static str] {
             "███████╗",
             "╚══════╝",
         ],
-        1 => &[
-            " ██╗",
-            "███║",
-            "╚██║",
-            " ██║",
-            " ██║",
-            " ╚═╝",
-        ],
+        1 => &[" ██╗", "███║", "╚██║", " ██║", " ██║", " ╚═╝"],
         _ => &[],
     }
 }
@@ -218,8 +207,14 @@ pub fn print_output(
     println!("  ╠{}╣", divider);
 
     let _ = execute!(stdout(), SetColors(Colors::new(DarkYellow, Black)));
-    println!("  ║{:^50}║", format!("Score: {} / {}", score, total_questions));
-    println!("  ║{:^50}║", format!("Correct: {}  |  Passed: {}", score, passed));
+    println!(
+        "  ║{:^50}║",
+        format!("Score: {} / {}", score, total_questions)
+    );
+    println!(
+        "  ║{:^50}║",
+        format!("Correct: {}  |  Passed: {}", score, passed)
+    );
     println!("  ║{:^50}║", format!("Accuracy: {:.0}%", accuracy));
     println!("  ║{:^50}║", format!("Pace: {:.1} answers/min", pace));
 
