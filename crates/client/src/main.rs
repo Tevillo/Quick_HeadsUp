@@ -1,10 +1,12 @@
 mod game;
 mod input;
+mod lobby;
+mod net;
 mod render;
 mod timer;
 mod types;
 
-use clap::Parser;
+use clap::{Parser, Subcommand};
 use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
@@ -43,9 +45,31 @@ struct Args {
     /// Filter to a specific category in the word file (e.g. "House Stark")
     #[arg(long)]
     category: Option<String>,
+
+    #[command(subcommand)]
+    command: Option<Command>,
 }
 
-fn load_words(path: &str, category: Option<&str>) -> Vec<String> {
+#[derive(Subcommand, Debug)]
+enum Command {
+    /// Create a room and wait for an opponent
+    Host {
+        /// Relay server address (host:port)
+        #[arg(long)]
+        relay: String,
+    },
+    /// Join an existing room
+    Join {
+        /// Relay server address (host:port)
+        #[arg(long)]
+        relay: String,
+        /// Room code to join
+        #[arg(long)]
+        code: String,
+    },
+}
+
+pub fn load_words(path: &str, category: Option<&str>) -> Vec<String> {
     let content = fs::read_to_string(Path::new(path)).expect("Could not read word file");
 
     let mut words = Vec::new();
@@ -81,8 +105,17 @@ fn load_words(path: &str, category: Option<&str>) -> Vec<String> {
 
 #[tokio::main]
 async fn main() {
-    let args = Args::parse();
+    let mut args = Args::parse();
+    let command = args.command.take();
 
+    match command {
+        None => run_solo(args).await,
+        Some(Command::Host { relay }) => run_host(args, relay).await,
+        Some(Command::Join { relay, code }) => run_join(args, relay, code).await,
+    }
+}
+
+async fn run_solo(args: Args) {
     let words = load_words(&args.word_file, args.category.as_deref());
     if words.is_empty() {
         eprintln!(
@@ -135,7 +168,7 @@ async fn main() {
     let timer_handle = tokio::spawn(timer::timer_task(timer_tx, args.game_time, bonus_rx));
 
     // Run game loop (blocks until game ends)
-    let summary = game::run_game(config, words, event_rx, bonus_sender, flash_tx).await;
+    let summary = game::run_game(config, words, event_rx, bonus_sender, flash_tx, None, None).await;
 
     // Abort background tasks
     input_handle.abort();
@@ -151,4 +184,40 @@ async fn main() {
         summary.game_time,
         summary.all_used,
     );
+}
+
+async fn run_host(args: Args, relay_addr: String) {
+    let words = load_words(&args.word_file, args.category.as_deref());
+    if words.is_empty() {
+        eprintln!(
+            "No words found in '{}' (category: {:?})",
+            args.word_file, args.category
+        );
+        std::process::exit(1);
+    }
+
+    let config = GameConfig {
+        game_time: args.game_time,
+        skip_countdown: args.skip_countdown,
+        last_unlimited: args.last_unlimited,
+        mode: if args.extra_time {
+            GameMode::ExtraTime {
+                bonus_seconds: args.bonus_seconds,
+            }
+        } else {
+            GameMode::Normal
+        },
+    };
+
+    if let Err(e) = lobby::run_host_session(config, words, &relay_addr, &args).await {
+        eprintln!("Error: {}", e);
+        std::process::exit(1);
+    }
+}
+
+async fn run_join(args: Args, relay_addr: String, code: String) {
+    if let Err(e) = lobby::run_joiner_session(&relay_addr, &code, &args).await {
+        eprintln!("Error: {}", e);
+        std::process::exit(1);
+    }
 }
