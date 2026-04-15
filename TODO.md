@@ -8,6 +8,8 @@
 - [ ] Fix timer skipping first second — timer often jumps from e.g. 10 to 8 on the first tick, and bonus time additions are inconsistent
 - [ ] Fix viewer side screen flash — flash effect not displaying correctly on the joiner/viewer side in networked mode
 - [ ] Custom word list support — allow users to create/import their own themed word lists beyond ASOIAF
+- [ ] Universal Ctrl+C — allow Ctrl+C to break out of the terminal at any point during the game
+- [ ] Rename config to `guess_up_config` — the configuration file should be named `guess_up_config` instead of the current name
 
 ## Medium
 
