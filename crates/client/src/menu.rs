@@ -3,24 +3,12 @@ use crate::render::{self, MenuItem};
 use crossterm::event::{Event, EventStream, KeyCode, KeyEventKind};
 use futures::StreamExt;
 
-pub enum MenuAction {
-    Solo,
-    Host {
-        relay_addr: String,
-    },
-    Join {
-        relay_addr: String,
-        room_code: String,
-    },
-    Quit,
-}
-
 enum Screen {
     Main,
     Settings,
 }
 
-pub async fn menu_loop(config: &mut AppConfig) -> MenuAction {
+pub async fn menu_loop(config: &mut AppConfig) {
     let mut screen = Screen::Main;
     let mut selected: usize = 0;
 
@@ -54,43 +42,23 @@ pub async fn menu_loop(config: &mut AppConfig) -> MenuAction {
                         selected = (selected + 1) % count;
                     }
                     KeyCode::Enter => match selected {
-                        0 => return MenuAction::Solo,
+                        0 => {
+                            drop(reader);
+                            crate::run_solo(config).await;
+                            config.save();
+                            reader = EventStream::new();
+                            continue;
+                        }
                         1 => {
-                            let result = run_server_connect(&mut *config, true, &mut reader).await;
-                            match result {
-                                ServerConnectResult::Selected(addr) => {
-                                    config.push_recent_server(&addr);
-                                    return MenuAction::Host { relay_addr: addr };
-                                }
-                                ServerConnectResult::Back => {
-                                    selected = 1;
-                                }
-                            }
+                            run_host_flow(config, &mut reader).await;
+                            config.save();
+                            selected = 1;
                             continue;
                         }
                         2 => {
-                            let result = run_server_connect(&mut *config, false, &mut reader).await;
-                            match result {
-                                ServerConnectResult::Selected(addr) => {
-                                    config.push_recent_server(&addr);
-                                    let join_result = run_join_room(&addr, &mut reader).await;
-                                    match join_result {
-                                        JoinRoomResult::Joined(code) => {
-                                            return MenuAction::Join {
-                                                relay_addr: addr,
-                                                room_code: code,
-                                            };
-                                        }
-                                        JoinRoomResult::Back => {
-                                            selected = 2;
-                                        }
-                                    }
-                                    continue;
-                                }
-                                ServerConnectResult::Back => {
-                                    selected = 2;
-                                }
-                            }
+                            run_join_flow(config, &mut reader).await;
+                            config.save();
+                            selected = 2;
                             continue;
                         }
                         3 => {
@@ -98,10 +66,10 @@ pub async fn menu_loop(config: &mut AppConfig) -> MenuAction {
                             selected = 0;
                             continue;
                         }
-                        4 => return MenuAction::Quit,
+                        4 => return,
                         _ => {}
                     },
-                    KeyCode::Char('q') | KeyCode::Esc => return MenuAction::Quit,
+                    KeyCode::Char('q') | KeyCode::Esc => return,
                     _ => {}
                 }
             }
@@ -126,6 +94,52 @@ pub async fn menu_loop(config: &mut AppConfig) -> MenuAction {
                     }
                 }
             }
+        }
+    }
+}
+
+/// Run the host flow: server connect → game session. Loops back to
+/// server connect after the session ends (disconnect, error, etc).
+async fn run_host_flow(config: &mut AppConfig, reader: &mut EventStream) {
+    loop {
+        let result = run_server_connect(config, true, reader).await;
+        match result {
+            ServerConnectResult::Selected(addr) => {
+                config.push_recent_server(&addr);
+                crate::run_host(config, &addr).await;
+                // Recreate reader after game (old one is stale)
+                *reader = EventStream::new();
+                // Loop back to server connect
+            }
+            ServerConnectResult::Back => return,
+        }
+    }
+}
+
+/// Run the join flow: server connect → room code → game session. Loops
+/// back to room code after the session ends. Loops back to server
+/// connect if the user presses Back from the room code screen.
+async fn run_join_flow(config: &mut AppConfig, reader: &mut EventStream) {
+    loop {
+        let result = run_server_connect(config, false, reader).await;
+        match result {
+            ServerConnectResult::Selected(addr) => {
+                config.push_recent_server(&addr);
+                // Loop on the room code screen — retries come back here
+                loop {
+                    let join_result = run_join_room(&addr, reader).await;
+                    match join_result {
+                        JoinRoomResult::Joined { conn, room_code } => {
+                            crate::run_join(conn, &room_code).await;
+                            // Recreate reader after game
+                            *reader = EventStream::new();
+                            // Loop back to room code screen
+                        }
+                        JoinRoomResult::Back => break, // back to server connect
+                    }
+                }
+            }
+            ServerConnectResult::Back => return,
         }
     }
 }
@@ -534,7 +548,10 @@ pub async fn run_settings_inline(config: &mut AppConfig, reader: &mut EventStrea
 // ─── Join room ──────────────────────────────────────────────────────
 
 enum JoinRoomResult {
-    Joined(String),
+    Joined {
+        conn: crate::net::NetConnection,
+        room_code: String,
+    },
     Back,
 }
 
@@ -542,20 +559,24 @@ async fn run_join_room(relay_addr: &str, reader: &mut EventStream) -> JoinRoomRe
     let mut input_buf = String::new();
     let mut editing = true;
     let mut selected: usize = 0; // 0 = text input, 1 = Back
+    let mut error_msg: Option<String> = None;
 
     loop {
         let term_size = render::terminal_size();
         let title_text = format!("JOIN — {}", relay_addr);
 
-        let items = [
-            MenuItem::TextInput {
-                label: "Room Code:",
-                value: &input_buf,
-                editing: editing && selected == 0,
-            },
-            MenuItem::Label(""),
-            MenuItem::Action("Back"),
-        ];
+        let mut items: Vec<MenuItem> = vec![MenuItem::TextInput {
+            label: "Room Code:",
+            value: &input_buf,
+            editing: editing && selected == 0,
+        }];
+
+        if let Some(ref err) = error_msg {
+            items.push(MenuItem::Error(err));
+        }
+
+        items.push(MenuItem::Label(""));
+        items.push(MenuItem::Action("Back"));
 
         render::render_menu(&title_text, &items, selected, term_size);
 
@@ -568,22 +589,41 @@ async fn run_join_room(relay_addr: &str, reader: &mut EventStream) -> JoinRoomRe
                 match key.code {
                     KeyCode::Enter => {
                         let code = input_buf.trim().to_uppercase();
-                        if !code.is_empty() {
-                            return JoinRoomResult::Joined(code);
+                        if code.is_empty() {
+                            continue;
                         }
-                        editing = false;
+                        // Show a connecting message
+                        let connecting_msg = format!("Connecting to {}...", relay_addr);
+                        render::render_message(&connecting_msg, term_size);
+
+                        match crate::lobby::try_join_room(relay_addr, &code).await {
+                            Ok(conn) => {
+                                return JoinRoomResult::Joined {
+                                    conn,
+                                    room_code: code,
+                                };
+                            }
+                            Err(e) => {
+                                error_msg = Some(format!("{}", e));
+                                input_buf.clear();
+                            }
+                        }
                     }
                     KeyCode::Esc => {
                         editing = false;
+                        error_msg = None;
                     }
                     KeyCode::Backspace => {
                         input_buf.pop();
+                        error_msg = None;
                     }
                     KeyCode::Char(c) => {
                         input_buf.push(c);
+                        error_msg = None;
                     }
                     KeyCode::Down | KeyCode::Tab => {
                         editing = false;
+                        error_msg = None;
                         selected = 1;
                     }
                     _ => {}

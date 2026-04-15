@@ -263,11 +263,9 @@ async fn run_host_game(
 
 // ─── Joiner session ─────────────────────────────────────────────────
 
-pub async fn run_joiner_session(
-    relay_addr: &str,
-    code: &str,
-    _app_config: &AppConfig,
-) -> io::Result<()> {
+/// Connect to the relay and join a room. Returns the established connection
+/// on success, or an error (e.g. bad room code, connection refused).
+pub async fn try_join_room(relay_addr: &str, code: &str) -> io::Result<NetConnection> {
     let mut conn = NetConnection::connect(relay_addr).await.map_err(|e| {
         io::Error::new(
             ErrorKind::ConnectionRefused,
@@ -282,18 +280,17 @@ pub async fn run_joiner_session(
     .await?;
 
     match conn.recv_relay_msg().await? {
-        Some(RelayMessage::JoinedRoom) => {}
-        Some(RelayMessage::Error(e)) => {
-            return Err(io::Error::other(format!("Relay error: {}", e)));
-        }
-        _ => {
-            return Err(io::Error::other("Unexpected relay response"));
-        }
+        Some(RelayMessage::JoinedRoom) => Ok(conn),
+        Some(RelayMessage::Error(e)) => Err(io::Error::other(format!("{}", e))),
+        _ => Err(io::Error::other("Unexpected relay response")),
     }
+}
 
+/// Run the joiner game session on an already-joined connection.
+pub async fn run_joiner_session(mut conn: NetConnection, room_code: &str) -> io::Result<()> {
     let _guard = render::TerminalGuard::new();
     let term_size = render::terminal_size();
-    render::render_joined_room(&code_upper, term_size);
+    render::render_joined_room(room_code, term_size);
 
     // Wait for role assignment
     let my_role = loop {

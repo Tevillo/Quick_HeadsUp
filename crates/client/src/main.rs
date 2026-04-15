@@ -11,6 +11,7 @@ mod types;
 use config::AppConfig;
 use crossterm::event::{Event, EventStream, KeyEventKind};
 use futures::StreamExt;
+use net::NetConnection;
 use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
@@ -67,27 +68,11 @@ pub fn load_categories(path: &str) -> Vec<String> {
 #[tokio::main]
 async fn main() {
     let mut config = AppConfig::load();
-
-    loop {
-        let _guard = render::TerminalGuard::new();
-        let action = menu::menu_loop(&mut config).await;
-        drop(_guard);
-
-        config.save();
-
-        match action {
-            menu::MenuAction::Solo => run_solo(&config).await,
-            menu::MenuAction::Host { relay_addr } => run_host(&mut config, &relay_addr).await,
-            menu::MenuAction::Join {
-                relay_addr,
-                room_code,
-            } => run_join(&config, &relay_addr, &room_code).await,
-            menu::MenuAction::Quit => break,
-        }
-    }
+    menu::menu_loop(&mut config).await;
+    config.save();
 }
 
-async fn run_solo(app_config: &AppConfig) {
+pub async fn run_solo(app_config: &AppConfig) {
     let words = load_words(&app_config.word_file, app_config.category.as_deref());
     if words.is_empty() {
         show_error(&format!(
@@ -148,19 +133,19 @@ async fn run_solo(app_config: &AppConfig) {
     );
 }
 
-async fn run_host(app_config: &mut AppConfig, relay_addr: &str) {
+pub async fn run_host(app_config: &mut AppConfig, relay_addr: &str) {
     if let Err(e) = lobby::run_host_session(relay_addr, app_config).await {
         show_error(&format!("{}", e)).await;
     }
 }
 
-async fn run_join(app_config: &AppConfig, relay_addr: &str, room_code: &str) {
-    if let Err(e) = lobby::run_joiner_session(relay_addr, room_code, app_config).await {
+pub async fn run_join(conn: NetConnection, room_code: &str) {
+    if let Err(e) = lobby::run_joiner_session(conn, room_code).await {
         show_error(&format!("{}", e)).await;
     }
 }
 
-async fn show_error(msg: &str) {
+pub async fn show_error(msg: &str) {
     let _guard = render::TerminalGuard::new();
     let term_size = render::terminal_size();
     render::render_error(msg, term_size);
