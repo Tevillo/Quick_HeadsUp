@@ -504,11 +504,11 @@ async fn run_post_game_menu(conn: &mut NetConnection) -> io::Result<PostGameActi
                     match key.code {
                         KeyCode::Char('p') | KeyCode::Char('P') => {
                             conn.send_client_msg(&ClientMessage::GameData(GameMessage::PlayAgain)).await?;
-                            return wait_for_peer_post_game(conn).await;
+                            return Ok(PostGameAction::PlayAgain);
                         }
                         KeyCode::Char('s') | KeyCode::Char('S') => {
                             conn.send_client_msg(&ClientMessage::GameData(GameMessage::SwapRoles)).await?;
-                            return wait_for_peer_post_game(conn).await;
+                            return Ok(PostGameAction::SwapRoles);
                         }
                         KeyCode::Char('q') | KeyCode::Char('Q') | KeyCode::Esc => {
                             conn.send_client_msg(&ClientMessage::GameData(GameMessage::QuitSession)).await?;
@@ -536,31 +536,6 @@ async fn run_post_game_menu(conn: &mut NetConnection) -> io::Result<PostGameActi
                     _ => {}
                 }
             }
-        }
-    }
-}
-
-async fn wait_for_peer_post_game(conn: &mut NetConnection) -> io::Result<PostGameAction> {
-    let term_size = render::terminal_size();
-    render::render_message("Waiting for opponent...", term_size);
-
-    loop {
-        match conn.recv_relay_msg().await? {
-            Some(RelayMessage::GameData(GameMessage::PlayAgain)) => {
-                return Ok(PostGameAction::PlayAgain);
-            }
-            Some(RelayMessage::GameData(GameMessage::SwapRoles)) => {
-                return Ok(PostGameAction::SwapRoles);
-            }
-            Some(RelayMessage::GameData(GameMessage::QuitSession))
-            | Some(RelayMessage::PeerDisconnected)
-            | None => {
-                return Ok(PostGameAction::Quit);
-            }
-            Some(RelayMessage::Ping) => {
-                conn.send_client_msg(&ClientMessage::Pong).await?;
-            }
-            _ => {}
         }
     }
 }
