@@ -79,6 +79,9 @@ pub async fn run_game(
         };
     };
 
+    // Track whether a flash animation is playing to avoid clobbering it
+    let mut flashing = false;
+
     // Render initial state based on role
     render_for_role(first_word, &state, local_role);
 
@@ -125,6 +128,7 @@ pub async fn run_game(
                 match action {
                     UserAction::Correct => {
                         state.score += 1;
+                        flashing = true;
                         render::flash_correct(flash_tx.clone());
                         if let Some(ref tx) = net_tx {
                             let _ = tx.send(GameMessage::Flash(FlashKind::Correct)).await;
@@ -137,6 +141,7 @@ pub async fn run_game(
                     }
                     UserAction::Pass => {
                         state.missed_words.push(current);
+                        flashing = true;
                         render::flash_incorrect(flash_tx.clone());
                         if let Some(ref tx) = net_tx {
                             let _ = tx.send(GameMessage::Flash(FlashKind::Incorrect)).await;
@@ -159,7 +164,9 @@ pub async fn run_game(
 
                 match state.current_word() {
                     Some(word) => {
-                        render_for_role(word, &state, local_role);
+                        if !flashing {
+                            render_for_role(word, &state, local_role);
+                        }
                         if let Some(ref tx) = net_tx {
                             let _ = tx
                                 .send(GameMessage::WordUpdate {
@@ -176,8 +183,10 @@ pub async fn run_game(
             }
             GameEvent::TimerTick(remaining) => {
                 state.seconds_left = remaining;
-                if let Some(word) = state.current_word() {
-                    render_for_role(word, &state, local_role);
+                if !flashing {
+                    if let Some(word) = state.current_word() {
+                        render_for_role(word, &state, local_role);
+                    }
                 }
                 if let Some(ref tx) = net_tx {
                     let _ = tx
@@ -222,6 +231,7 @@ pub async fn run_game(
                 }
             }
             GameEvent::Redraw => {
+                flashing = false;
                 if let Some(word) = state.current_word() {
                     render_for_role(word, &state, local_role);
                 }
@@ -286,6 +296,7 @@ pub async fn run_remote_game(
     let mut seconds_left: u64 = 0;
     let mut score: usize = 0;
     let mut total: usize = 0;
+    let mut flashing = false;
 
     loop {
         let Some(event) = rx.recv().await else {
@@ -295,23 +306,27 @@ pub async fn run_remote_game(
         match event {
             GameEvent::NetWordUpdate(word) => {
                 current_word = word;
-                match role {
-                    Role::Viewer => {
-                        render::render_question(&current_word, seconds_left, score, term_size);
-                    }
-                    Role::Holder => {
-                        render::render_holder_view(seconds_left, score, term_size);
+                if !flashing {
+                    match role {
+                        Role::Viewer => {
+                            render::render_question(&current_word, seconds_left, score, term_size);
+                        }
+                        Role::Holder => {
+                            render::render_holder_view(seconds_left, score, term_size);
+                        }
                     }
                 }
             }
             GameEvent::NetTimerSync(secs) => {
                 seconds_left = secs;
-                match role {
-                    Role::Viewer => {
-                        render::render_question(&current_word, seconds_left, score, term_size);
-                    }
-                    Role::Holder => {
-                        render::render_holder_view(seconds_left, score, term_size);
+                if !flashing {
+                    match role {
+                        Role::Viewer => {
+                            render::render_question(&current_word, seconds_left, score, term_size);
+                        }
+                        Role::Holder => {
+                            render::render_holder_view(seconds_left, score, term_size);
+                        }
                     }
                 }
             }
@@ -319,10 +334,13 @@ pub async fn run_remote_game(
                 score = s;
                 total = t;
             }
-            GameEvent::NetFlash(kind) => match kind {
-                protocol::FlashKind::Correct => render::flash_correct(flash_tx.clone()),
-                protocol::FlashKind::Incorrect => render::flash_incorrect(flash_tx.clone()),
-            },
+            GameEvent::NetFlash(kind) => {
+                flashing = true;
+                match kind {
+                    protocol::FlashKind::Correct => render::flash_correct(flash_tx.clone()),
+                    protocol::FlashKind::Incorrect => render::flash_incorrect(flash_tx.clone()),
+                }
+            }
             GameEvent::NetTimerExpired => {
                 render::bell();
             }
@@ -355,14 +373,17 @@ pub async fn run_remote_game(
                 tokio::time::sleep(std::time::Duration::from_secs(2)).await;
                 break;
             }
-            GameEvent::Redraw => match role {
-                Role::Viewer => {
-                    render::render_question(&current_word, seconds_left, score, term_size);
+            GameEvent::Redraw => {
+                flashing = false;
+                match role {
+                    Role::Viewer => {
+                        render::render_question(&current_word, seconds_left, score, term_size);
+                    }
+                    Role::Holder => {
+                        render::render_holder_view(seconds_left, score, term_size);
+                    }
                 }
-                Role::Holder => {
-                    render::render_holder_view(seconds_left, score, term_size);
-                }
-            },
+            }
             _ => {}
         }
     }
