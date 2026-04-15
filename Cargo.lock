@@ -329,7 +329,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "heads_up"
+name = "guess_up"
 version = "0.2.0"
 dependencies = [
  "chrono",

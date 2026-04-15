@@ -1,52 +1,28 @@
-# CLAUDE.md — Heads Up CLI Game
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## What This Is
 
-An ASOIAF (A Song of Ice and Fire) themed "Heads Up" party game for the terminal, built in Rust. Players see a name/term on screen and press `y` (correct) or `n` (pass) before the timer runs out.
+An ASOIAF (A Song of Ice and Fire) themed "Heads Up" party game for the terminal, built in Rust. Players see a name/term on screen and press `y` (correct) or `n` (pass) before the timer runs out. Supports solo play and networked two-player mode via a relay server.
 
 ## Build & Run
 
 ```bash
-cargo build --release        # optimized binary at target/release/heads_up
-cargo run                    # dev build, default 60s game
-cargo run -- --extra-time --bonus-seconds 3   # extra-time mode
-cargo run -- --category "House Stark"          # filter by category
+cargo build --release                          # build all crates
+cargo run -p heads_up                          # solo mode, default 60s game
+cargo run -p heads_up -- -x --bonus-seconds 3  # extra-time mode
+cargo run -p heads_up -- --category "House Stark"  # filter by category
+
+# Networked mode
+cargo run -p heads_up -- host --relay server:7878
+cargo run -p heads_up -- join --relay server:7878 --code ABCDE
+
+# Relay server
+cargo run -p relay                             # binds to 0.0.0.0:7878
 ```
 
-CLI flags: `-g` (game time), `-s` (skip countdown), `-l` (last unlimited), `-x` (extra time), `--bonus-seconds`, `-w` (word file), `--category`.
-
-## Architecture
-
-Channel-based async with tokio. Three concurrent tasks communicate via `tokio::sync::mpsc`:
-
-```
-Input Task (crossterm EventStream) ---> tx --+
-                                             v
-Timer Task (1s interval ticks)     ---> tx --> Game Loop (tokio::select!) --> Render
-```
-
-This architecture is intentional — it cleanly separates input, timing, and game logic, and is designed to enable a future **networked mode** where the input task is swapped for a network listener without touching game logic.
-
-### Modules
-
-| Module | Responsibility |
-|--------|---------------|
-| `main.rs` | CLI args (clap), word loading with category parsing, channel setup, task spawning |
-| `types.rs` | `GameEvent`, `UserAction`, `GameMode`, `GameConfig`, `GameResult`, type aliases |
-| `game.rs` | `GameState`, game loop (`tokio::select!`), Fisher-Yates shuffle, history saving |
-| `input.rs` | `input_task()` — crossterm `EventStream`, single-keypress in raw mode |
-| `timer.rs` | `timer_task()` — 1s interval ticks, bonus-time channel for extra-time mode |
-| `render.rs` | `TerminalGuard` (RAII cleanup), rendering, flash, countdown, summary output |
-
-This split will evolve as features are added (e.g., networking, persistence modules). The key invariant is that `input.rs` stays separate from `game.rs` to allow swapping input sources.
-
-### Key Implementation Details
-
-- **TerminalGuard**: RAII pattern with `Drop` — ensures raw mode and alternate screen are cleaned up on panic or early exit.
-- **Flash race condition**: `flash_screen()` clobbers the display; after 150ms it sends `GameEvent::Redraw` so the game loop re-renders the current word.
-- **Summary rendering**: `TerminalGuard` must be dropped *before* `print_output()` — otherwise the summary prints inside the alternate screen buffer and gets wiped.
-- **Word loading**: Parses `[Category]` headers, trims lines, deduplicates via `HashSet` (case-insensitive).
-- **History**: Saved to `~/.heads_up_history.json` via serde.
+CLI flags: `-g` (game time), `-s` (skip countdown), `-l` (last unlimited), `-x` (extra time), `--bonus-seconds`, `-w` (word file), `--category`. Flags go before the subcommand (`host`/`join`).
 
 ## Coding Standards
 
@@ -55,20 +31,77 @@ This split will evolve as features are added (e.g., networking, persistence modu
 - **Error handling**: Prefer `Result` propagation with `?` over `.expect()` / `.unwrap()`. Existing `.expect()` calls are legacy and should migrate toward `Result`-based handling over time.
 - **Style**: Idiomatic Rust — `match` expressions, iterators, `Option`/`Result` types. Snake_case functions, PascalCase types.
 
+## Architecture
+
+Cargo workspace with three crates:
+
+```
+crates/
+  protocol/   # shared message types (ClientMessage, RelayMessage, GameMessage) + TCP framing (length-prefixed JSON)
+  relay/      # standalone relay server binary — room management, message forwarding, heartbeat pings
+  client/     # the game binary (solo + networked modes)
+```
+
+### Client Architecture
+
+Channel-based async with tokio. Concurrent tasks communicate via `tokio::sync::mpsc`:
+
+```
+Input Task (crossterm EventStream) ---> tx --+
+                                             v
+Timer Task (1s interval ticks)     ---> tx --> Game Loop (tokio::select!) --> Render
+                                             ^
+Network Task (TCP via relay)       ---> tx --+  (networked mode only)
+```
+
+### Client Modules
+
+| Module | Responsibility |
+|--------|---------------|
+| `main.rs` | CLI args (clap), word loading with category parsing, channel setup, task spawning |
+| `types.rs` | `GameEvent`, `UserAction`, `GameMode`, `GameConfig`, `GameResult`, type aliases |
+| `game.rs` | `GameState`, game loop (`tokio::select!`), Fisher-Yates shuffle, history saving. `run_game` is the host/solo loop, `run_remote_game` is the joiner's display-only loop |
+| `input.rs` | `input_task()` — crossterm `EventStream`, single-keypress in raw mode |
+| `timer.rs` | `timer_task()` — 1s interval ticks, bonus-time channel for extra-time mode |
+| `render.rs` | `TerminalGuard` (RAII cleanup), rendering, flash, countdown, lobby screens, summary output |
+| `net.rs` | `NetConnection` (TCP connect/split/reassemble), `NetHandle` (spawn read/write tasks, recoverable shutdown) |
+| `lobby.rs` | Room creation, role selection, joiner handshake, post-game menu (play again / swap roles / quit) |
+
+The key invariant is that `input.rs` stays separate from `game.rs` to allow swapping input sources.
+
+### Key Implementation Details
+
+- **TerminalGuard**: RAII pattern with `Drop` — ensures raw mode and alternate screen are cleaned up on panic or early exit.
+- **Flash race condition**: `flash_screen()` clobbers the display; after 150ms it sends `GameEvent::Redraw` so the game loop re-renders the current word.
+- **Summary rendering**: `TerminalGuard` must be dropped *before* `print_output()` — otherwise the summary prints inside the alternate screen buffer and gets wiped.
+- **Connection recovery**: In networked mode, `NetHandle::shutdown()` recovers the TCP reader/writer from background tasks so the connection can be reused across games without reconnecting.
+- **Host-authoritative model**: The host owns all game state (words, timer, score). The joiner runs `run_remote_game` which only renders based on messages received from the host. Input routing depends on role — Viewer processes `RemoteInput`, Holder processes `UserInput`.
+- **Word loading**: Parses `[Category]` headers, trims lines, deduplicates via `HashSet` (case-insensitive).
+- **History**: Saved to `~/.heads_up_history.json` via serde.
+
+### Protocol
+
+The `protocol` crate defines length-prefixed JSON framing over TCP (`read_frame`/`write_frame`, max 64KB). Three message layers:
+- **ClientMessage**: client → relay (CreateRoom, JoinRoom, GameData, Disconnect, Pong)
+- **RelayMessage**: relay → client (RoomCreated, PeerJoined, GameData, PeerDisconnected, Ping)
+- **GameMessage**: peer ↔ peer (forwarded through relay) — role assignment, word updates, timer sync, score, input, post-game actions
+
 ## Testing
 
 Manual play-testing is the primary test strategy. Key scenarios to verify:
 
-1. `cargo run` — normal mode works end-to-end
-2. `cargo run -- --last-unlimited` — last question gets infinite time
-3. `cargo run -- --extra-time --bonus-seconds 3` — bonus time adds correctly
-4. `cargo run -- --category "House Stark"` — category filtering works
+1. `cargo run -p heads_up` — normal mode works end-to-end
+2. `cargo run -p heads_up -- --last-unlimited` — last question gets infinite time
+3. `cargo run -p heads_up -- --extra-time --bonus-seconds 3` — bonus time adds correctly
+4. `cargo run -p heads_up -- --category "House Stark"` — category filtering works
 5. Ctrl+C during game — terminal restores cleanly
 6. `~/.heads_up_history.json` is written after a game
+7. Networked mode: host + join, role selection, play-again flow, peer disconnect handling
 
 ## Working With Claude
 
 - **Ask before implementing**: Before making changes, ask pertinent clarifying questions to ensure alignment on scope, approach, and intent.
+- **Before creating a PR**: Update `README.md` and `CLAUDE.md` to reflect any changes introduced by the branch. Do this before opening the pull request, not after.
 
 ### CRITICAL — Branch Protection Rules
 
@@ -85,17 +118,14 @@ Violating this rule means lost work, broken workflows, and angry maintainers. **
 ## Git Workflow
 
 - Feature branches merged via pull requests.
-- Branch naming: `flashing-lights` or descriptive feature names.
-- Branch names should be in kebab case.
+- Branch naming: descriptive kebab-case names (e.g. `flashing-lights`, `p2p-networked-mode`).
 - **All changes go through PRs. Direct pushes to `main` are forbidden.**
 
 ## Future Plans
 
-- **Networked mode**: Two machines — one sees timer/scores ("viewer"), the other shows names and captures input ("holder"). Replace `input_task` with TCP/WebSocket listener.
 - **Game history CLI viewer**: View `~/.heads_up_history.json` from the command line.
-- **Multi-round / replay**: "Play again?" prompt after a round.
+- **Multi-round / replay**: "Play again?" prompt after a solo round.
 - **Configurable key bindings**: Currently hardcoded to y/n/q.
-- **README update**: README still reflects v0.1.
 
 ## Word List
 
