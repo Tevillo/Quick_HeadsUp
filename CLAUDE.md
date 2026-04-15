@@ -10,19 +10,13 @@ An ASOIAF (A Song of Ice and Fire) themed "Guess Up" party game for the terminal
 
 ```bash
 cargo build --release                          # build all crates
-cargo run -p guess_up                          # solo mode, default 60s game
-cargo run -p guess_up -- -x --bonus-seconds 3  # extra-time mode
-cargo run -p guess_up -- --category "House Stark"  # filter by category
-
-# Networked mode
-cargo run -p guess_up -- host --relay server:7878
-cargo run -p guess_up -- join --relay server:7878 --code ABCDE
+cargo run -p guess_up                          # launches TUI menu
 
 # Relay server
 cargo run -p relay                             # binds to 0.0.0.0:7878
 ```
 
-CLI flags: `-g` (game time), `-s` (skip countdown), `-l` (last unlimited), `-x` (extra time), `--bonus-seconds`, `-w` (word file), `--category`. Flags go before the subcommand (`host`/`join`).
+All game settings (game time, categories, extra-time mode, relay server, etc.) are configured through the interactive TUI menu. Settings persist between sessions in `~/.guess_up_config.json`. No CLI flags needed for the client.
 
 ## Coding Standards
 
@@ -58,14 +52,16 @@ Network Task (TCP via relay)       ---> tx --+  (networked mode only)
 
 | Module | Responsibility |
 |--------|---------------|
-| `main.rs` | CLI args (clap), word loading with category parsing, channel setup, task spawning |
+| `main.rs` | Word loading with category parsing, game runners (solo/host/join), entry point |
+| `config.rs` | `AppConfig` struct, defaults, load/save `~/.guess_up_config.json`, `to_game_config()` |
+| `menu.rs` | TUI menu state machine (`menu_loop`), all screens (main, settings, category picker, server connect, join room), game dispatch |
 | `types.rs` | `GameEvent`, `UserAction`, `GameMode`, `GameConfig`, `GameResult`, type aliases |
 | `game.rs` | `GameState`, game loop (`tokio::select!`), Fisher-Yates shuffle, history saving. `run_game` is the host/solo loop, `run_remote_game` is the joiner's display-only loop |
 | `input.rs` | `input_task()` — crossterm `EventStream`, single-keypress in raw mode |
 | `timer.rs` | `timer_task()` — 1s interval ticks, bonus-time channel for extra-time mode |
-| `render.rs` | `TerminalGuard` (RAII cleanup), rendering, flash, countdown, lobby screens, summary output |
+| `render.rs` | `TerminalGuard` (RAII cleanup), `MenuItem` enum, menu rendering, game rendering, flash, countdown, lobby screens, summary output |
 | `net.rs` | `NetConnection` (TCP connect/split/reassemble), `NetHandle` (spawn read/write tasks, recoverable shutdown) |
-| `lobby.rs` | Room creation, role selection, joiner handshake, post-game menu (play again / swap roles / quit) |
+| `lobby.rs` | Room creation, host lobby (wait for peer with settings), role selection (with settings), joiner session loop, post-game menu, connection recovery across games |
 
 The key invariant is that `input.rs` stays separate from `game.rs` to allow swapping input sources.
 
@@ -74,8 +70,12 @@ The key invariant is that `input.rs` stays separate from `game.rs` to allow swap
 - **TerminalGuard**: RAII pattern with `Drop` — ensures raw mode and alternate screen are cleaned up on panic or early exit.
 - **Flash race condition**: `flash_screen()` clobbers the display; after 150ms it sends `GameEvent::Redraw` so the game loop re-renders the current word. Both game loops track a `flashing` flag to skip renders while the flash is on screen, preventing the game loop or timer ticks from overwriting the flash effect.
 - **Summary rendering**: `TerminalGuard` must be dropped *before* `print_output()` — otherwise the summary prints inside the alternate screen buffer and gets wiped.
-- **Connection recovery**: In networked mode, `NetHandle::shutdown()` recovers the TCP reader/writer from background tasks so the connection can be reused across games without reconnecting.
+- **Connection recovery**: In networked mode, `NetHandle::shutdown()` recovers the TCP reader/writer from background tasks so the connection can be reused across games without reconnecting. Both host and joiner recover connections after each game for multi-round play.
 - **Host-authoritative model**: The host owns all game state (words, timer, score). The joiner runs `run_remote_game` which only renders based on messages received from the host. Input routing depends on role — Viewer processes `RemoteInput`, Holder processes `UserInput`.
+- **Joiner post-game**: After a game, the joiner waits for the host's next `RoleAssignment` (signaling a new round) rather than intermediate `PlayAgain`/`SwapRoles` messages. This avoids a race condition where the net read task could consume messages during shutdown.
+- **Menu-driven game dispatch**: `menu_loop` owns the full lifecycle — it runs games internally and loops back to the appropriate screen (server connect, room code) after each game ends, preserving menu state.
+- **Settings persistence**: `AppConfig` is loaded from `~/.guess_up_config.json` on startup and saved after each menu exit or game. `#[serde(default)]` ensures forward compatibility.
+- **Address validation**: Relay server addresses are validated (host:port format, numeric port 1-65535) before connection attempts. Errors display inline in red on the input screen.
 - **Word loading**: Parses `[Category]` headers, trims lines, deduplicates via `HashSet` (case-insensitive).
 - **History**: Saved to `~/.guess_up_history.json` via serde.
 
@@ -90,13 +90,16 @@ The `protocol` crate defines length-prefixed JSON framing over TCP (`read_frame`
 
 Manual play-testing is the primary test strategy. Key scenarios to verify:
 
-1. `cargo run -p guess_up` — normal mode works end-to-end
-2. `cargo run -p guess_up -- --last-unlimited` — last question gets infinite time
-3. `cargo run -p guess_up -- --extra-time --bonus-seconds 3` — bonus time adds correctly
-4. `cargo run -p guess_up -- --category "House Stark"` — category filtering works
-5. Ctrl+C during game — terminal restores cleanly
-6. `~/.guess_up_history.json` is written after a game
-7. Networked mode: host + join, role selection, play-again flow, peer disconnect handling
+1. `cargo run -p guess_up` — main menu renders, arrow/hjkl navigation works
+2. Settings → change game_time → exit → re-run → value persisted in `~/.guess_up_config.json`
+3. Solo → plays full game → returns to main menu
+4. Category picker → scroll through categories → select one → only those words appear
+5. Host → server connect screen → type address → connect → room created → settings accessible while waiting
+6. Join → server connect → enter room code → wrong code shows error inline → correct code joins
+7. Networked: host + join, role selection, play-again/swap-roles flow, peer disconnect handling
+8. Room stays alive across games — PlayAgain and SwapRoles work without reconnecting
+9. Ctrl+C during game — terminal restores cleanly
+10. `~/.guess_up_history.json` is written after a game
 
 ## Working With Claude
 
@@ -124,7 +127,6 @@ Violating this rule means lost work, broken workflows, and angry maintainers. **
 ## Future Plans
 
 - **Game history CLI viewer**: View `~/.guess_up_history.json` from the command line.
-- **Multi-round / replay**: "Play again?" prompt after a solo round.
 - **Configurable key bindings**: Currently hardcoded to y/n/q.
 
 ## Word List
