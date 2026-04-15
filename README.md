@@ -217,6 +217,10 @@ Network Task (TCP via relay)       ---> tx --+  (networked mode only)
 | `net.rs` | TCP connection to relay, message translation |
 | `lobby.rs` | Room setup, role selection, post-game flow |
 
+## Roadmap
+
+See [TODO.md](TODO.md) for planned features and improvements.
+
 ## License
 
 MIT
