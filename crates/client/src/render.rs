@@ -1,11 +1,12 @@
 use crate::types::{EventSender, GameEvent};
 use crossterm::cursor::{DisableBlinking, Hide, MoveTo, Show};
 use crossterm::style::{
-    Color::{self, Black, Blue, DarkYellow, Green, Red, White},
+    Color::{self, Black, Blue, DarkYellow, Green, Magenta, Red, White},
     Colors, SetColors,
 };
 use crossterm::terminal::{self, Clear, EnterAlternateScreen, LeaveAlternateScreen};
 use crossterm::{execute, queue};
+use protocol::Role;
 use std::io::{stdout, Write};
 use std::time::Duration;
 
@@ -251,4 +252,129 @@ pub fn print_output(
 
     let _ = execute!(stdout(), SetColors(Colors::new(Blue, Black)));
     println!("  ╚{}╝\n", divider);
+}
+
+// ─── Holder view (networked: shows timer + score but NOT the word) ───
+
+pub fn render_holder_view(seconds_left: u64, score: usize, term_size: (u16, u16)) {
+    let (tw, th) = term_size;
+    let mid_row = th / 2;
+
+    let placeholder = "GUESS!";
+    let timer_line = format!("{:02} Seconds Left  |  Score: {}", seconds_left, score);
+    let hint_line = "Press [Y] Correct  [N] Pass";
+    let content_width = timer_line.len().max(hint_line.len()).max(placeholder.len()) + 4;
+    let box_line: String = "―".repeat(content_width - 2);
+
+    let col = center_col(tw, content_width as u16);
+
+    let _ = queue!(
+        stdout(),
+        SetColors(Colors::new(White, Magenta)),
+        Clear(terminal::ClearType::All),
+        MoveTo(col, mid_row),
+    );
+    print!("┌{}┐", box_line);
+    let _ = queue!(stdout(), MoveTo(col, mid_row + 1));
+    print!("│ {:^width$} │", placeholder, width = content_width - 4);
+    let _ = queue!(stdout(), MoveTo(col, mid_row + 2));
+    print!("│ {:^width$} │", timer_line, width = content_width - 4);
+    let _ = queue!(stdout(), MoveTo(col, mid_row + 3));
+    print!("│ {:^width$} │", hint_line, width = content_width - 4);
+    let _ = queue!(stdout(), MoveTo(col, mid_row + 4));
+    print!("└{}┘", box_line);
+    let _ = stdout().flush();
+}
+
+// ─── Lobby rendering ─────────────────────────────────────────────────
+
+fn render_centered_box(lines: &[&str], term_size: (u16, u16), bg: Color) {
+    let (tw, th) = term_size;
+    let content_width = lines.iter().map(|l| l.len()).max().unwrap_or(20) + 4;
+    let box_line: String = "―".repeat(content_width - 2);
+    let total_height = lines.len() as u16 + 2; // top + bottom border
+    let start_row = th.saturating_sub(total_height) / 2;
+    let col = center_col(tw, content_width as u16);
+
+    let _ = queue!(
+        stdout(),
+        SetColors(Colors::new(White, bg)),
+        Clear(terminal::ClearType::All),
+        MoveTo(col, start_row),
+    );
+    print!("┌{}┐", box_line);
+    for (i, line) in lines.iter().enumerate() {
+        let _ = queue!(stdout(), MoveTo(col, start_row + 1 + i as u16));
+        print!("│ {:^width$} │", line, width = content_width - 4);
+    }
+    let _ = queue!(stdout(), MoveTo(col, start_row + 1 + lines.len() as u16));
+    print!("└{}┘", box_line);
+    let _ = stdout().flush();
+}
+
+pub fn render_waiting_for_peer(room_code: &str, term_size: (u16, u16)) {
+    let code_line = format!("Room: {}", room_code);
+    let lines = [
+        "HEADS UP — HOST",
+        "",
+        &code_line,
+        "",
+        "Waiting for opponent...",
+    ];
+    render_centered_box(&lines, term_size, Blue);
+}
+
+pub fn render_joined_room(room_code: &str, term_size: (u16, u16)) {
+    let code_line = format!("Joined room: {}", room_code);
+    let lines = [
+        "HEADS UP — JOINED",
+        "",
+        &code_line,
+        "",
+        "Waiting for host...",
+    ];
+    render_centered_box(&lines, term_size, Blue);
+}
+
+pub fn render_role_select(term_size: (u16, u16)) {
+    let lines = [
+        "CHOOSE YOUR ROLE",
+        "",
+        "[V] Viewer — See words, give clues",
+        "[H] Holder — Guess and press Y/N",
+    ];
+    render_centered_box(&lines, term_size, Blue);
+}
+
+pub fn render_role_assigned(role: Role, term_size: (u16, u16)) {
+    let role_line = format!("You are the: {}", role);
+    let desc = match role {
+        Role::Viewer => "You'll see the words and give verbal clues",
+        Role::Holder => "You'll guess and press [Y] Correct / [N] Pass",
+    };
+    let lines = [
+        "ROLE ASSIGNED",
+        "",
+        &role_line,
+        desc,
+        "",
+        "Game starting...",
+    ];
+    render_centered_box(&lines, term_size, Blue);
+}
+
+pub fn render_post_game_menu(term_size: (u16, u16)) {
+    let lines = [
+        "WHAT NEXT?",
+        "",
+        "[P] Play again",
+        "[S] Swap roles",
+        "[Q] Quit session",
+    ];
+    render_centered_box(&lines, term_size, Blue);
+}
+
+pub fn render_message(msg: &str, term_size: (u16, u16)) {
+    let lines = [msg];
+    render_centered_box(&lines, term_size, Blue);
 }
