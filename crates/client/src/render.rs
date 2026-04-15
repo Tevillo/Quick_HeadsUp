@@ -111,7 +111,7 @@ pub async fn flash_screen(color: Color, tx: EventSender) {
         SetColors(Colors::new(Black, color)),
         Clear(terminal::ClearType::All),
     );
-    tokio::time::sleep(Duration::from_millis(300)).await;
+    tokio::time::sleep(Duration::from_millis(150)).await;
     let _ = execute!(
         stdout(),
         SetColors(Colors::new(White, Blue)),
