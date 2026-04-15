@@ -394,7 +394,7 @@ fn save_history(state: &GameState, config: &GameConfig) {
     let Some(home) = dirs::home_dir() else {
         return;
     };
-    let path = home.join(".heads_up_history.json");
+    let path = home.join(".guess_up_history.json");
 
     let mut history: Vec<GameResult> = if let Ok(data) = fs::read_to_string(&path) {
         serde_json::from_str(&data).unwrap_or_default()

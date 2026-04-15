@@ -9,7 +9,7 @@ use tokio::sync::{mpsc, Mutex, RwLock};
 use tracing::{info, warn};
 
 #[derive(Parser, Debug)]
-#[command(version, about = "Heads Up relay server")]
+#[command(version, about = "Guess Up relay server")]
 struct Args {
     /// Address to bind to
     #[arg(long, default_value = "0.0.0.0:7878")]

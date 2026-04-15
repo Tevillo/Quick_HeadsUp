@@ -15,7 +15,7 @@ use types::*;
 #[derive(Parser, Debug)]
 #[command(
     version,
-    about = "ASOIAF Heads Up! — A Song of Ice and Fire themed party game"
+    about = "ASOIAF Guess Up! — A Song of Ice and Fire themed party game"
 )]
 struct Args {
     /// Game length in seconds
