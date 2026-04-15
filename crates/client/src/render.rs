@@ -10,6 +10,228 @@ use protocol::Role;
 use std::io::{stdout, Write};
 use std::time::Duration;
 
+// ─── Menu rendering ─────────────────────────────────────────────────
+
+pub enum MenuItem<'a> {
+    Label(&'a str),
+    Action(&'a str),
+    Setting {
+        label: &'a str,
+        value: &'a str,
+    },
+    TextInput {
+        label: &'a str,
+        value: &'a str,
+        editing: bool,
+    },
+}
+
+impl MenuItem<'_> {
+    pub fn is_selectable(&self) -> bool {
+        !matches!(self, MenuItem::Label(_))
+    }
+}
+
+pub fn render_menu(title: &str, items: &[MenuItem], selected: usize, term_size: (u16, u16)) {
+    let (tw, th) = term_size;
+
+    // Calculate content width from items
+    let item_widths: Vec<usize> = items
+        .iter()
+        .map(|item| match item {
+            MenuItem::Label(s) | MenuItem::Action(s) => s.len(),
+            MenuItem::Setting { label, value } => label.len() + value.len() + 4,
+            MenuItem::TextInput {
+                label,
+                value,
+                editing,
+            } => {
+                let cursor = if *editing { "_" } else { "" };
+                label.len() + value.len() + cursor.len() + 4
+            }
+        })
+        .collect();
+
+    let content_width = title.len().max(*item_widths.iter().max().unwrap_or(&20)) + 6; // "│ " + content + " │" + padding
+
+    let box_line: String = "―".repeat(content_width - 2);
+    let total_height = items.len() as u16 + 4; // top border + title + blank + items + bottom border
+    let start_row = th.saturating_sub(total_height) / 2;
+    let col = center_col(tw, content_width as u16);
+
+    let _ = queue!(
+        stdout(),
+        SetColors(Colors::new(White, Blue)),
+        Clear(terminal::ClearType::All),
+        MoveTo(col, start_row),
+    );
+    print!("┌{}┐", box_line);
+
+    // Title
+    let _ = queue!(stdout(), MoveTo(col, start_row + 1));
+    let _ = queue!(stdout(), SetColors(Colors::new(DarkYellow, Blue)));
+    print!("│ {:^width$} │", title, width = content_width - 4);
+
+    // Blank line under title
+    let _ = queue!(stdout(), MoveTo(col, start_row + 2));
+    let _ = queue!(stdout(), SetColors(Colors::new(White, Blue)));
+    print!("│ {:width$} │", "", width = content_width - 4);
+
+    // Track which selectable index we're at
+    let mut selectable_idx = 0;
+
+    for (i, item) in items.iter().enumerate() {
+        let row = start_row + 3 + i as u16;
+        let _ = queue!(stdout(), MoveTo(col, row));
+
+        let is_selected = item.is_selectable() && selectable_idx == selected;
+        if item.is_selectable() {
+            selectable_idx += 1;
+        }
+
+        if is_selected {
+            let _ = queue!(stdout(), SetColors(Colors::new(DarkYellow, Black)));
+        } else {
+            let _ = queue!(stdout(), SetColors(Colors::new(White, Blue)));
+        }
+
+        let text = match item {
+            MenuItem::Label(s) => format!("  {}", s),
+            MenuItem::Action(s) => {
+                if is_selected {
+                    format!("> {}", s)
+                } else {
+                    format!("  {}", s)
+                }
+            }
+            MenuItem::Setting { label, value } => {
+                if is_selected {
+                    format!("> {}  {}", label, value)
+                } else {
+                    format!("  {}  {}", label, value)
+                }
+            }
+            MenuItem::TextInput {
+                label,
+                value,
+                editing,
+            } => {
+                let display_val = if *editing {
+                    format!("{}_", value)
+                } else {
+                    value.to_string()
+                };
+                if is_selected {
+                    format!("> {}  {}", label, display_val)
+                } else {
+                    format!("  {}  {}", label, display_val)
+                }
+            }
+        };
+
+        print!("│ {:<width$} │", text, width = content_width - 4);
+
+        // Reset colors after selected item
+        if is_selected {
+            let _ = queue!(stdout(), SetColors(Colors::new(White, Blue)));
+        }
+    }
+
+    // Bottom border
+    let bottom_row = start_row + 3 + items.len() as u16;
+    let _ = queue!(stdout(), MoveTo(col, bottom_row));
+    let _ = queue!(stdout(), SetColors(Colors::new(White, Blue)));
+    print!("└{}┘", box_line);
+
+    let _ = stdout().flush();
+}
+
+pub fn render_category_picker(
+    categories: &[String],
+    selected: usize,
+    scroll_offset: usize,
+    term_size: (u16, u16),
+) {
+    let (tw, th) = term_size;
+    let visible_count = 15usize.min(categories.len());
+    let content_width = categories
+        .iter()
+        .map(|c| c.len())
+        .max()
+        .unwrap_or(10)
+        .max("SELECT CATEGORY".len())
+        + 6;
+
+    let box_line: String = "―".repeat(content_width - 2);
+    let total_height = visible_count as u16 + 4; // borders + title + blank
+    let start_row = th.saturating_sub(total_height) / 2;
+    let col = center_col(tw, content_width as u16);
+
+    let _ = queue!(
+        stdout(),
+        SetColors(Colors::new(White, Blue)),
+        Clear(terminal::ClearType::All),
+        MoveTo(col, start_row),
+    );
+    print!("┌{}┐", box_line);
+
+    // Title
+    let _ = queue!(stdout(), MoveTo(col, start_row + 1));
+    let _ = queue!(stdout(), SetColors(Colors::new(DarkYellow, Blue)));
+    print!(
+        "│ {:^width$} │",
+        "SELECT CATEGORY",
+        width = content_width - 4
+    );
+
+    // Scroll indicator top
+    let _ = queue!(stdout(), MoveTo(col, start_row + 2));
+    let _ = queue!(stdout(), SetColors(Colors::new(White, Blue)));
+    if scroll_offset > 0 {
+        print!("│ {:^width$} │", "▲ more ▲", width = content_width - 4);
+    } else {
+        print!("│ {:width$} │", "", width = content_width - 4);
+    }
+
+    // Visible items
+    for i in 0..visible_count {
+        let idx = scroll_offset + i;
+        let row = start_row + 3 + i as u16;
+        let _ = queue!(stdout(), MoveTo(col, row));
+
+        let is_selected = idx == selected;
+        if is_selected {
+            let _ = queue!(stdout(), SetColors(Colors::new(DarkYellow, Black)));
+        } else {
+            let _ = queue!(stdout(), SetColors(Colors::new(White, Blue)));
+        }
+
+        let prefix = if is_selected { "> " } else { "  " };
+        let name = &categories[idx];
+        print!("│ {}{:<width$} │", prefix, name, width = content_width - 6);
+
+        if is_selected {
+            let _ = queue!(stdout(), SetColors(Colors::new(White, Blue)));
+        }
+    }
+
+    // Scroll indicator bottom
+    let bottom_indicator_row = start_row + 3 + visible_count as u16;
+    let _ = queue!(stdout(), MoveTo(col, bottom_indicator_row));
+    let _ = queue!(stdout(), SetColors(Colors::new(White, Blue)));
+    if scroll_offset + visible_count < categories.len() {
+        print!("│ {:^width$} │", "▼ more ▼", width = content_width - 4);
+    } else {
+        print!("│ {:width$} │", "", width = content_width - 4);
+    }
+
+    // Bottom border
+    let _ = queue!(stdout(), MoveTo(col, bottom_indicator_row + 1));
+    print!("└{}┘", box_line);
+
+    let _ = stdout().flush();
+}
+
 pub struct TerminalGuard;
 
 impl TerminalGuard {

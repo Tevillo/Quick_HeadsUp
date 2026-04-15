@@ -1,10 +1,10 @@
+use crate::config::AppConfig;
 use crate::game;
 use crate::input;
 use crate::net::{self, NetConnection};
 use crate::render;
 use crate::timer;
 use crate::types::*;
-use crate::Args;
 use crossterm::event::{Event, EventStream, KeyCode, KeyEventKind};
 use futures::StreamExt;
 use protocol::{ClientMessage, GameMessage, NetGameConfig, RelayMessage, Role};
@@ -16,7 +16,7 @@ pub async fn run_host_session(
     config: GameConfig,
     words: Vec<String>,
     relay_addr: &str,
-    args: &Args,
+    app_config: &AppConfig,
 ) -> io::Result<()> {
     let mut conn = NetConnection::connect(relay_addr).await.map_err(|e| {
         io::Error::new(
@@ -111,7 +111,8 @@ pub async fn run_host_session(
         }
 
         // --- Run the game (net tasks own the connection during this phase) ---
-        let current_words = crate::load_words(&args.word_file, args.category.as_deref());
+        let current_words =
+            crate::load_words(&app_config.word_file, app_config.category.as_deref());
         let (summary, recovered_conn) =
             run_host_game(&config, current_words, conn, host_role).await;
 
@@ -198,7 +199,11 @@ async fn run_host_game(
 
 // ─── Joiner session ─────────────────────────────────────────────────
 
-pub async fn run_joiner_session(relay_addr: &str, code: &str, _args: &Args) -> io::Result<()> {
+pub async fn run_joiner_session(
+    relay_addr: &str,
+    code: &str,
+    _app_config: &AppConfig,
+) -> io::Result<()> {
     let mut conn = NetConnection::connect(relay_addr).await.map_err(|e| {
         io::Error::new(
             ErrorKind::ConnectionRefused,
