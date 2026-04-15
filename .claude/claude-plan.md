@@ -1,8 +1,8 @@
-# Heads Up CLI Game - Rewrite Plan
+# Guess Up CLI Game - Rewrite Plan
 
 ## Context
 
-The existing ASOIAF Heads Up game (`exercise-6/`) had a fundamentally broken async architecture: a custom `Future` impl with blocking `stdin().read_line()` inside `poll()`, which blocked the entire tokio runtime. The timer only fired after user input, giving the last question infinite time. The centering logic required pre-padded word list entries (leading spaces on odd-length names). Several features were abandoned mid-implementation (color flash). This rewrite fixes the architecture with channels + `tokio::select!`, adds game modes, and improves the UX.
+The existing ASOIAF Guess Up game (`exercise-6/`) had a fundamentally broken async architecture: a custom `Future` impl with blocking `stdin().read_line()` inside `poll()`, which blocked the entire tokio runtime. The timer only fired after user input, giving the last question infinite time. The centering logic required pre-padded word list entries (leading spaces on odd-length names). Several features were abandoned mid-implementation (color flash). This rewrite fixes the architecture with channels + `tokio::select!`, adds game modes, and improves the UX.
 
 ## Feature Status
 
@@ -18,7 +18,7 @@ The existing ASOIAF Heads Up game (`exercise-6/`) had a fundamentally broken asy
 - [x] **Live score + timer** -- updates every second via `TimerTick`, score shown alongside timer
 - [x] **Custom word list** -- `--word-file <path>` flag, default `files/ASOIAF_list.txt`
 - [x] **Category support** -- `[Category]` headers in word files, `--category <name>` flag to filter
-- [x] **Game history** -- saves results to `~/.heads_up_history.json` with serde
+- [x] **Game history** -- saves results to `~/.guess_up_history.json` with serde
 - [x] **Terminal bell** -- `\x07` on timer expiry
 - [x] **Terminal safety** -- `TerminalGuard` with `Drop` for raw mode + alternate screen cleanup
 - [x] **Fisher-Yates shuffle** -- O(n) word selection, graceful exhaustion handling
@@ -30,7 +30,7 @@ The existing ASOIAF Heads Up game (`exercise-6/`) had a fundamentally broken asy
 ### Not Yet Implemented
 
 - [ ] **Networked mode** -- two machines connected, one sees timer/scores, other sees names (long-term goal)
-- [ ] **Game history CLI viewer** -- no way to view `~/.heads_up_history.json` from the CLI yet
+- [ ] **Game history CLI viewer** -- no way to view `~/.guess_up_history.json` from the CLI yet
 - [ ] **Configurable key bindings** -- keys are hardcoded (y/n/q)
 - [ ] **Multi-round / replay** -- game exits after one round, no "play again?" prompt
 - [ ] **Sound effects beyond bell** -- only terminal bell on expiry, no per-answer sounds
@@ -118,7 +118,7 @@ Changes from v0.1:
 - Added `futures` for `StreamExt::next()` on `EventStream`
 - Added `serde` + `serde_json` for game history JSON serialization
 - Added `chrono` for timestamps in history entries
-- Added `dirs` for `home_dir()` to locate `~/.heads_up_history.json`
+- Added `dirs` for `home_dir()` to locate `~/.guess_up_history.json`
 - Removed `rascii_art` (countdown rewritten with box-drawing characters)
 - Removed `term_size` (crossterm provides `terminal::size()`)
 
@@ -139,6 +139,6 @@ The module split (`input.rs` separate from `game.rs`) specifically enables swapp
 3. `cargo run -- --last-unlimited` -- timer expires, shows "LAST QUESTION", waits for answer, then ends
 4. `cargo run -- --extra-time --bonus-seconds 3` -- correct answers add 3 seconds to timer
 5. `cargo run -- --word-file files/ASOIAF_list.txt --category "House Stark"` -- only Stark names appear
-6. Check `~/.heads_up_history.json` exists after a game
+6. Check `~/.guess_up_history.json` exists after a game
 7. Ctrl+C during game -- terminal restores cleanly (raw mode off, alternate screen exited)
 8. Run with very long names and very short names -- centering is correct for both

@@ -18,7 +18,7 @@ impl TerminalGuard {
         let _ = execute!(
             stdout(),
             EnterAlternateScreen,
-            terminal::SetTitle("ASOIAF Heads Up"),
+            terminal::SetTitle("ASOIAF Guess Up"),
             SetColors(Colors::new(White, Blue)),
             DisableBlinking,
             Hide,

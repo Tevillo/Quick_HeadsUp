@@ -2,8 +2,8 @@
 
 ## Easy
 
-- [ ] Flash screen effect too short/unreliable — increase duration beyond 150ms (`crates/client/src/render.rs:108`)
-- [ ] Rename all instances of "heads_up" / "Heads Up" to "guess_up" / "Guess Up" across codebase
+- [x] Flash screen effect too short/unreliable — increase duration beyond 150ms (`crates/client/src/render.rs:108`)
+- [x] Rename all instances of "heads_up" / "Heads Up" to "guess_up" / "Guess Up" across codebase
 - [ ] Low-time warning — visual cue when timer is running low (e.g. last 10s border turns red or timer text changes color)
 - [ ] Custom word list support — allow users to create/import their own themed word lists beyond ASOIAF
 

@@ -4,19 +4,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-An ASOIAF (A Song of Ice and Fire) themed "Heads Up" party game for the terminal, built in Rust. Players see a name/term on screen and press `y` (correct) or `n` (pass) before the timer runs out. Supports solo play and networked two-player mode via a relay server.
+An ASOIAF (A Song of Ice and Fire) themed "Guess Up" party game for the terminal, built in Rust. Players see a name/term on screen and press `y` (correct) or `n` (pass) before the timer runs out. Supports solo play and networked two-player mode via a relay server.
 
 ## Build & Run
 
 ```bash
 cargo build --release                          # build all crates
-cargo run -p heads_up                          # solo mode, default 60s game
-cargo run -p heads_up -- -x --bonus-seconds 3  # extra-time mode
-cargo run -p heads_up -- --category "House Stark"  # filter by category
+cargo run -p guess_up                          # solo mode, default 60s game
+cargo run -p guess_up -- -x --bonus-seconds 3  # extra-time mode
+cargo run -p guess_up -- --category "House Stark"  # filter by category
 
 # Networked mode
-cargo run -p heads_up -- host --relay server:7878
-cargo run -p heads_up -- join --relay server:7878 --code ABCDE
+cargo run -p guess_up -- host --relay server:7878
+cargo run -p guess_up -- join --relay server:7878 --code ABCDE
 
 # Relay server
 cargo run -p relay                             # binds to 0.0.0.0:7878
@@ -72,12 +72,12 @@ The key invariant is that `input.rs` stays separate from `game.rs` to allow swap
 ### Key Implementation Details
 
 - **TerminalGuard**: RAII pattern with `Drop` — ensures raw mode and alternate screen are cleaned up on panic or early exit.
-- **Flash race condition**: `flash_screen()` clobbers the display; after 150ms it sends `GameEvent::Redraw` so the game loop re-renders the current word.
+- **Flash race condition**: `flash_screen()` clobbers the display; after 150ms it sends `GameEvent::Redraw` so the game loop re-renders the current word. Both game loops track a `flashing` flag to skip renders while the flash is on screen, preventing the game loop or timer ticks from overwriting the flash effect.
 - **Summary rendering**: `TerminalGuard` must be dropped *before* `print_output()` — otherwise the summary prints inside the alternate screen buffer and gets wiped.
 - **Connection recovery**: In networked mode, `NetHandle::shutdown()` recovers the TCP reader/writer from background tasks so the connection can be reused across games without reconnecting.
 - **Host-authoritative model**: The host owns all game state (words, timer, score). The joiner runs `run_remote_game` which only renders based on messages received from the host. Input routing depends on role — Viewer processes `RemoteInput`, Holder processes `UserInput`.
 - **Word loading**: Parses `[Category]` headers, trims lines, deduplicates via `HashSet` (case-insensitive).
-- **History**: Saved to `~/.heads_up_history.json` via serde.
+- **History**: Saved to `~/.guess_up_history.json` via serde.
 
 ### Protocol
 
@@ -90,12 +90,12 @@ The `protocol` crate defines length-prefixed JSON framing over TCP (`read_frame`
 
 Manual play-testing is the primary test strategy. Key scenarios to verify:
 
-1. `cargo run -p heads_up` — normal mode works end-to-end
-2. `cargo run -p heads_up -- --last-unlimited` — last question gets infinite time
-3. `cargo run -p heads_up -- --extra-time --bonus-seconds 3` — bonus time adds correctly
-4. `cargo run -p heads_up -- --category "House Stark"` — category filtering works
+1. `cargo run -p guess_up` — normal mode works end-to-end
+2. `cargo run -p guess_up -- --last-unlimited` — last question gets infinite time
+3. `cargo run -p guess_up -- --extra-time --bonus-seconds 3` — bonus time adds correctly
+4. `cargo run -p guess_up -- --category "House Stark"` — category filtering works
 5. Ctrl+C during game — terminal restores cleanly
-6. `~/.heads_up_history.json` is written after a game
+6. `~/.guess_up_history.json` is written after a game
 7. Networked mode: host + join, role selection, play-again flow, peer disconnect handling
 
 ## Working With Claude
@@ -123,7 +123,7 @@ Violating this rule means lost work, broken workflows, and angry maintainers. **
 
 ## Future Plans
 
-- **Game history CLI viewer**: View `~/.heads_up_history.json` from the command line.
+- **Game history CLI viewer**: View `~/.guess_up_history.json` from the command line.
 - **Multi-round / replay**: "Play again?" prompt after a solo round.
 - **Configurable key bindings**: Currently hardcoded to y/n/q.
 

@@ -1,6 +1,6 @@
-# Heads Up! - ASOIAF Edition
+# Guess Up! - ASOIAF Edition
 
-A terminal-based "Heads Up" party game themed around A Song of Ice and Fire. Play solo (hold the screen to your forehead while friends give clues) or networked (two players on different machines connected through a relay server).
+A terminal-based "Guess Up" party game themed around A Song of Ice and Fire. Play solo (hold the screen to your forehead while friends give clues) or networked (two players on different machines connected through a relay server).
 
 Press `y` for correct, `n` to pass — no Enter needed.
 
@@ -13,11 +13,11 @@ Requires [Rust](https://www.rust-lang.org/tools/install). If you run into versio
 cargo build --release
 
 # Play solo — default 60-second game
-cargo run -p heads_up
+cargo run -p guess_up
 
 # Or play networked (see sections below)
-cargo run -p heads_up -- host --relay your-server:7878
-cargo run -p heads_up -- join --relay your-server:7878 --code ABCDE
+cargo run -p guess_up -- host --relay your-server:7878
+cargo run -p guess_up -- join --relay your-server:7878 --code ABCDE
 ```
 
 Press `q` at any time to quit. The terminal always restores cleanly, even on Ctrl+C.
@@ -27,14 +27,14 @@ Press `q` at any time to quit. The terminal always restores cleanly, even on Ctr
 When you run without a subcommand, you get the original single-device experience:
 
 ```bash
-cargo run -p heads_up                              # default 60-second game
-cargo run -p heads_up -- -g 90                     # 90-second game
-cargo run -p heads_up -- -s                        # skip the 3-2-1 countdown
-cargo run -p heads_up -- -l                        # unlimited time on the last question
-cargo run -p heads_up -- -x                        # extra-time mode (correct answers add time)
-cargo run -p heads_up -- -x --bonus-seconds 3      # add 3s per correct answer
-cargo run -p heads_up -- --category "House Stark"  # only House Stark entries
-cargo run -p heads_up -- -w my_words.txt           # use a custom word list
+cargo run -p guess_up                              # default 60-second game
+cargo run -p guess_up -- -g 90                     # 90-second game
+cargo run -p guess_up -- -s                        # skip the 3-2-1 countdown
+cargo run -p guess_up -- -l                        # unlimited time on the last question
+cargo run -p guess_up -- -x                        # extra-time mode (correct answers add time)
+cargo run -p guess_up -- -x --bonus-seconds 3      # add 3s per correct answer
+cargo run -p guess_up -- --category "House Stark"  # only House Stark entries
+cargo run -p guess_up -- -w my_words.txt           # use a custom word list
 ```
 
 ## Networked Mode
@@ -49,7 +49,7 @@ After each game, both players get a post-game menu to play again, swap roles, or
 ### Hosting a Game
 
 ```bash
-cargo run -p heads_up -- host --relay your-server:7878
+cargo run -p guess_up -- host --relay your-server:7878
 ```
 
 This connects to the relay, creates a room, and displays a 5-letter room code (e.g. `STARK`). Share this code with your opponent. Once they join, you'll pick your role and the game starts.
@@ -57,7 +57,7 @@ This connects to the relay, creates a room, and displays a 5-letter room code (e
 All solo-mode flags work with `host` too:
 
 ```bash
-cargo run -p heads_up -- -g 90 -x --bonus-seconds 3 host --relay your-server:7878
+cargo run -p guess_up -- -g 90 -x --bonus-seconds 3 host --relay your-server:7878
 ```
 
 The host controls the game config — the joiner receives it automatically.
@@ -65,7 +65,7 @@ The host controls the game config — the joiner receives it automatically.
 ### Joining a Game
 
 ```bash
-cargo run -p heads_up -- join --relay your-server:7878 --code STARK
+cargo run -p guess_up -- join --relay your-server:7878 --code STARK
 ```
 
 Enter the room code the host gave you (case-insensitive). You'll see your assigned role, then the game starts. The joiner doesn't need to specify game flags — the host's settings are used.
@@ -81,17 +81,17 @@ The relay is a lightweight TCP server that forwards messages between the two pla
 cargo build --release -p relay
 
 # Copy to your server
-scp target/release/relay your-server:/usr/local/bin/heads-up-relay
+scp target/release/relay your-server:/usr/local/bin/guess-up-relay
 ```
 
 **Run it:**
 
 ```bash
 # Simplest form (binds to 0.0.0.0:7878)
-heads-up-relay
+guess-up-relay
 
 # Custom options
-heads-up-relay --bind 0.0.0.0:9000 --max-rooms 50 --room-timeout 1800
+guess-up-relay --bind 0.0.0.0:9000 --max-rooms 50 --room-timeout 1800
 ```
 
 | Flag | Default | Description |
@@ -108,15 +108,15 @@ sudo ufw allow 7878/tcp
 
 **Run as a systemd service (optional):**
 
-Create `/etc/systemd/system/heads-up-relay.service`:
+Create `/etc/systemd/system/guess-up-relay.service`:
 
 ```ini
 [Unit]
-Description=Heads Up Relay Server
+Description=Guess Up Relay Server
 After=network.target
 
 [Service]
-ExecStart=/usr/local/bin/heads-up-relay --bind 0.0.0.0:7878
+ExecStart=/usr/local/bin/guess-up-relay --bind 0.0.0.0:7878
 Restart=on-failure
 User=nobody
 Group=nogroup
@@ -127,17 +127,17 @@ WantedBy=multi-user.target
 
 ```bash
 sudo systemctl daemon-reload
-sudo systemctl enable --now heads-up-relay
+sudo systemctl enable --now guess-up-relay
 ```
 
 **Check logs:**
 
 ```bash
 # Direct — tracing output goes to stderr
-RUST_LOG=info heads-up-relay
+RUST_LOG=info guess-up-relay
 
 # Systemd
-journalctl -u heads-up-relay -f
+journalctl -u guess-up-relay -f
 ```
 
 **Verify connectivity from a client machine:**
@@ -179,7 +179,7 @@ Lines are trimmed and deduplicated automatically.
 - **Green/red flash** — visual feedback on correct/pass
 - **Live timer and score** — updated every second
 - **End-of-round summary** — score, accuracy %, pace, and missed words
-- **Game history** — results saved to `~/.heads_up_history.json`
+- **Game history** — results saved to `~/.guess_up_history.json`
 - **Category filtering** — play with only the entries you want
 - **Networked play** — two players on different machines via relay server
 - **Role selection** — host picks Viewer or Holder, swap after each game
