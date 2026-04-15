@@ -11,10 +11,15 @@ enum Screen {
 pub async fn menu_loop(config: &mut AppConfig) {
     let mut screen = Screen::Main;
     let mut selected: usize = 0;
-
+    let mut guard = Some(render::TerminalGuard::new());
     let mut reader = EventStream::new();
 
     loop {
+        if guard.is_none() {
+            guard = Some(render::TerminalGuard::new());
+            reader = EventStream::new();
+        }
+
         let term_size = render::terminal_size();
 
         match &screen {
@@ -43,6 +48,7 @@ pub async fn menu_loop(config: &mut AppConfig) {
                     }
                     KeyCode::Enter => match selected {
                         0 => {
+                            guard.take();
                             drop(reader);
                             crate::run_solo(config).await;
                             config.save();
@@ -50,13 +56,13 @@ pub async fn menu_loop(config: &mut AppConfig) {
                             continue;
                         }
                         1 => {
-                            run_host_flow(config, &mut reader).await;
+                            run_host_flow(config, &mut guard, &mut reader).await;
                             config.save();
                             selected = 1;
                             continue;
                         }
                         2 => {
-                            run_join_flow(config, &mut reader).await;
+                            run_join_flow(config, &mut guard, &mut reader).await;
                             config.save();
                             selected = 2;
                             continue;
@@ -100,16 +106,22 @@ pub async fn menu_loop(config: &mut AppConfig) {
 
 /// Run the host flow: server connect → game session. Loops back to
 /// server connect after the session ends (disconnect, error, etc).
-async fn run_host_flow(config: &mut AppConfig, reader: &mut EventStream) {
+async fn run_host_flow(
+    config: &mut AppConfig,
+    guard: &mut Option<render::TerminalGuard>,
+    reader: &mut EventStream,
+) {
     loop {
         let result = run_server_connect(config, true, reader).await;
         match result {
             ServerConnectResult::Selected(addr) => {
                 config.push_recent_server(&addr);
+                // Drop guard before game (it manages its own terminal)
+                guard.take();
                 crate::run_host(config, &addr).await;
-                // Recreate reader after game (old one is stale)
+                // Restore guard and reader for the next iteration
+                *guard = Some(render::TerminalGuard::new());
                 *reader = EventStream::new();
-                // Loop back to server connect
             }
             ServerConnectResult::Back => return,
         }
@@ -119,7 +131,11 @@ async fn run_host_flow(config: &mut AppConfig, reader: &mut EventStream) {
 /// Run the join flow: server connect → room code → game session. Loops
 /// back to room code after the session ends. Loops back to server
 /// connect if the user presses Back from the room code screen.
-async fn run_join_flow(config: &mut AppConfig, reader: &mut EventStream) {
+async fn run_join_flow(
+    config: &mut AppConfig,
+    guard: &mut Option<render::TerminalGuard>,
+    reader: &mut EventStream,
+) {
     loop {
         let result = run_server_connect(config, false, reader).await;
         match result {
@@ -130,10 +146,12 @@ async fn run_join_flow(config: &mut AppConfig, reader: &mut EventStream) {
                     let join_result = run_join_room(&addr, reader).await;
                     match join_result {
                         JoinRoomResult::Joined { conn, room_code } => {
+                            // Drop guard before game
+                            guard.take();
                             crate::run_join(conn, &room_code).await;
-                            // Recreate reader after game
+                            // Restore guard and reader
+                            *guard = Some(render::TerminalGuard::new());
                             *reader = EventStream::new();
-                            // Loop back to room code screen
                         }
                         JoinRoomResult::Back => break, // back to server connect
                     }
