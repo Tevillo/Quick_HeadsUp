@@ -149,19 +149,7 @@ async fn run_solo(app_config: &AppConfig) {
 }
 
 async fn run_host(app_config: &mut AppConfig, relay_addr: &str) {
-    let words = load_words(&app_config.word_file, app_config.category.as_deref());
-    if words.is_empty() {
-        show_error(&format!(
-            "No words found in '{}' (category: {:?})",
-            app_config.word_file, app_config.category
-        ))
-        .await;
-        return;
-    }
-
-    let config = app_config.to_game_config();
-
-    if let Err(e) = lobby::run_host_session(config, words, relay_addr, app_config).await {
+    if let Err(e) = lobby::run_host_session(relay_addr, app_config).await {
         show_error(&format!("{}", e)).await;
     }
 }

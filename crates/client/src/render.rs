@@ -537,18 +537,6 @@ fn render_centered_box(lines: &[&str], term_size: (u16, u16), bg: Color) {
     let _ = stdout().flush();
 }
 
-pub fn render_waiting_for_peer(room_code: &str, term_size: (u16, u16)) {
-    let code_line = format!("Room: {}", room_code);
-    let lines = [
-        "HEADS UP — HOST",
-        "",
-        &code_line,
-        "",
-        "Waiting for opponent...",
-    ];
-    render_centered_box(&lines, term_size, Blue);
-}
-
 pub fn render_joined_room(room_code: &str, term_size: (u16, u16)) {
     let code_line = format!("Joined room: {}", room_code);
     let lines = [

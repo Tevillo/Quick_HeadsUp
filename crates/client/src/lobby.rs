@@ -13,12 +13,7 @@ use std::io::{self, ErrorKind};
 
 // ─── Host session ────────────────────────────────────────────────────
 
-pub async fn run_host_session(
-    config: GameConfig,
-    words: Vec<String>,
-    relay_addr: &str,
-    app_config: &mut AppConfig,
-) -> io::Result<()> {
+pub async fn run_host_session(relay_addr: &str, app_config: &mut AppConfig) -> io::Result<()> {
     let mut conn = NetConnection::connect(relay_addr).await.map_err(|e| {
         io::Error::new(
             ErrorKind::ConnectionRefused,
@@ -39,34 +34,35 @@ pub async fn run_host_session(
     };
 
     let mut guard = Some(render::TerminalGuard::new());
-    let term_size = render::terminal_size();
-    render::render_waiting_for_peer(&code, term_size);
 
-    // Wait for peer to join
-    loop {
-        match conn.recv_relay_msg().await? {
-            Some(RelayMessage::PeerJoined) => break,
-            Some(RelayMessage::Ping) => {
-                conn.send_client_msg(&ClientMessage::Pong).await?;
-            }
-            None => {
-                return Err(io::Error::new(
-                    ErrorKind::ConnectionAborted,
-                    "Relay disconnected",
-                ));
-            }
-            _ => {}
-        }
+    // Wait for peer (with settings access)
+    let wait_result = wait_for_peer(&code, &mut conn, app_config).await?;
+    if !wait_result {
+        let _ = conn.send_client_msg(&ClientMessage::Disconnect).await;
+        return Ok(());
     }
 
     // Role selection
     let mut host_role = select_role(app_config).await;
 
     loop {
+        // Rebuild config and words from current settings each round
+        let config = app_config.to_game_config();
+        let words = crate::load_words(&app_config.word_file, app_config.category.as_deref());
+        if words.is_empty() {
+            let term_size = render::terminal_size();
+            render::render_message("No words found for current settings!", term_size);
+            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+            let _ = conn.send_client_msg(&ClientMessage::Disconnect).await;
+            return Ok(());
+        }
+
         // Ensure we're in alternate screen
         if guard.is_none() {
             guard = Some(render::TerminalGuard::new());
         }
+
+        let term_size = render::terminal_size();
 
         // Send role assignment to joiner
         conn.send_client_msg(&ClientMessage::GameData(GameMessage::RoleAssignment {
@@ -111,11 +107,8 @@ pub async fn run_host_session(
             render::render_countdown(term_size);
         }
 
-        // --- Run the game (net tasks own the connection during this phase) ---
-        let current_words =
-            crate::load_words(&app_config.word_file, app_config.category.as_deref());
-        let (summary, recovered_conn) =
-            run_host_game(&config, current_words, conn, host_role).await;
+        // --- Run the game ---
+        let (summary, recovered_conn) = run_host_game(&config, words, conn, host_role).await;
 
         conn = match recovered_conn {
             Some(c) => c,
@@ -150,6 +143,76 @@ pub async fn run_host_session(
         }
     }
 }
+
+// ─── Wait for peer (with settings menu) ─────────────────────────────
+
+/// Wait for a peer to join the room. Returns `true` if a peer joined,
+/// `false` if the host chose to disconnect.
+async fn wait_for_peer(
+    room_code: &str,
+    conn: &mut NetConnection,
+    app_config: &mut AppConfig,
+) -> io::Result<bool> {
+    let mut reader = EventStream::new();
+    let mut selected: usize = 0;
+    let count = 2; // Settings, Disconnect
+
+    loop {
+        let term_size = render::terminal_size();
+        let code_line = format!("Room: {}", room_code);
+        let items = [
+            MenuItem::Label("WAITING FOR OPPONENT..."),
+            MenuItem::Label(""),
+            MenuItem::Label(&code_line),
+            MenuItem::Label(""),
+            MenuItem::Action("Settings"),
+            MenuItem::Action("Disconnect"),
+        ];
+        render::render_menu("HOST LOBBY", &items, selected, term_size);
+
+        tokio::select! {
+            event = reader.next() => {
+                let Some(Ok(event)) = event else { continue };
+                let Event::Key(key) = event else { continue };
+                if key.kind != KeyEventKind::Press {
+                    continue;
+                }
+                match key.code {
+                    KeyCode::Up | KeyCode::Char('k') => {
+                        selected = selected.checked_sub(1).unwrap_or(count - 1);
+                    }
+                    KeyCode::Down | KeyCode::Char('j') => {
+                        selected = (selected + 1) % count;
+                    }
+                    KeyCode::Enter => match selected {
+                        0 => menu::run_settings_inline(app_config, &mut reader).await,
+                        1 => return Ok(false),
+                        _ => {}
+                    },
+                    KeyCode::Esc | KeyCode::Char('q') => return Ok(false),
+                    _ => {}
+                }
+            }
+            msg = conn.recv_relay_msg() => {
+                match msg? {
+                    Some(RelayMessage::PeerJoined) => return Ok(true),
+                    Some(RelayMessage::Ping) => {
+                        conn.send_client_msg(&ClientMessage::Pong).await?;
+                    }
+                    None => {
+                        return Err(io::Error::new(
+                            ErrorKind::ConnectionAborted,
+                            "Relay disconnected",
+                        ));
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+}
+
+// ─── Host game ──────────────────────────────────────────────────────
 
 async fn run_host_game(
     config: &GameConfig,
