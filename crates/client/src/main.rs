@@ -77,7 +77,7 @@ async fn main() {
 
         match action {
             menu::MenuAction::Solo => run_solo(&config).await,
-            menu::MenuAction::Host { relay_addr } => run_host(&config, &relay_addr).await,
+            menu::MenuAction::Host { relay_addr } => run_host(&mut config, &relay_addr).await,
             menu::MenuAction::Join {
                 relay_addr,
                 room_code,
@@ -148,7 +148,7 @@ async fn run_solo(app_config: &AppConfig) {
     );
 }
 
-async fn run_host(app_config: &AppConfig, relay_addr: &str) {
+async fn run_host(app_config: &mut AppConfig, relay_addr: &str) {
     let words = load_words(&app_config.word_file, app_config.category.as_deref());
     if words.is_empty() {
         show_error(&format!(

@@ -509,8 +509,8 @@ async fn run_server_connect(
     }
 }
 
-/// Run the full settings screen inline (used from server connect when hosting).
-async fn run_settings_inline(config: &mut AppConfig, reader: &mut EventStream) {
+/// Run the full settings screen inline (reusable from any screen).
+pub async fn run_settings_inline(config: &mut AppConfig, reader: &mut EventStream) {
     let mut selected: usize = 0;
     loop {
         let term_size = render::terminal_size();

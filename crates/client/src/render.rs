@@ -561,16 +561,6 @@ pub fn render_joined_room(room_code: &str, term_size: (u16, u16)) {
     render_centered_box(&lines, term_size, Blue);
 }
 
-pub fn render_role_select(term_size: (u16, u16)) {
-    let lines = [
-        "CHOOSE YOUR ROLE",
-        "",
-        "[V] Viewer — See words, give clues",
-        "[H] Holder — Guess and press Y/N",
-    ];
-    render_centered_box(&lines, term_size, Blue);
-}
-
 pub fn render_role_assigned(role: Role, term_size: (u16, u16)) {
     let role_line = format!("You are the: {}", role);
     let desc = match role {

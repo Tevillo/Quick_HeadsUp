@@ -1,8 +1,9 @@
 use crate::config::AppConfig;
 use crate::game;
 use crate::input;
+use crate::menu;
 use crate::net::{self, NetConnection};
-use crate::render;
+use crate::render::{self, MenuItem};
 use crate::timer;
 use crate::types::*;
 use crossterm::event::{Event, EventStream, KeyCode, KeyEventKind};
@@ -16,7 +17,7 @@ pub async fn run_host_session(
     config: GameConfig,
     words: Vec<String>,
     relay_addr: &str,
-    app_config: &AppConfig,
+    app_config: &mut AppConfig,
 ) -> io::Result<()> {
     let mut conn = NetConnection::connect(relay_addr).await.map_err(|e| {
         io::Error::new(
@@ -59,7 +60,7 @@ pub async fn run_host_session(
     }
 
     // Role selection
-    let mut host_role = select_role().await;
+    let mut host_role = select_role(app_config).await;
 
     loop {
         // Ensure we're in alternate screen
@@ -297,21 +298,46 @@ pub async fn run_joiner_session(
 
 // ─── Role selection (host only) ──────────────────────────────────────
 
-async fn select_role() -> Role {
-    let term_size = render::terminal_size();
-    render::render_role_select(term_size);
-
+async fn select_role(app_config: &mut AppConfig) -> Role {
+    let mut selected: usize = 0;
     let mut reader = EventStream::new();
+    let count = 3; // Viewer, Holder, Settings
+
     loop {
-        if let Some(Ok(Event::Key(key))) = reader.next().await {
-            if key.kind != KeyEventKind::Press {
-                continue;
+        let term_size = render::terminal_size();
+        let items = [
+            MenuItem::Action("Viewer — See words, give clues"),
+            MenuItem::Action("Holder — Guess and press Y/N"),
+            MenuItem::Label(""),
+            MenuItem::Action("Settings"),
+        ];
+        render::render_menu("CHOOSE YOUR ROLE", &items, selected, term_size);
+
+        let Some(Ok(event)) = reader.next().await else {
+            continue;
+        };
+        let Event::Key(key) = event else {
+            continue;
+        };
+        if key.kind != KeyEventKind::Press {
+            continue;
+        }
+        match key.code {
+            KeyCode::Up | KeyCode::Char('k') => {
+                selected = selected.checked_sub(1).unwrap_or(count - 1);
             }
-            match key.code {
-                KeyCode::Char('v') | KeyCode::Char('V') => return Role::Viewer,
-                KeyCode::Char('h') | KeyCode::Char('H') => return Role::Holder,
+            KeyCode::Down | KeyCode::Char('j') => {
+                selected = (selected + 1) % count;
+            }
+            KeyCode::Enter => match selected {
+                0 => return Role::Viewer,
+                1 => return Role::Holder,
+                2 => menu::run_settings_inline(app_config, &mut reader).await,
                 _ => {}
-            }
+            },
+            KeyCode::Char('v') | KeyCode::Char('V') => return Role::Viewer,
+            KeyCode::Char('h') | KeyCode::Char('H') => return Role::Holder,
+            _ => {}
         }
     }
 }
