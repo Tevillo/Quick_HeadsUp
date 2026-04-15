@@ -9,6 +9,8 @@ mod timer;
 mod types;
 
 use config::AppConfig;
+use crossterm::event::{Event, EventStream, KeyEventKind};
+use futures::StreamExt;
 use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
@@ -88,10 +90,11 @@ async fn main() {
 async fn run_solo(app_config: &AppConfig) {
     let words = load_words(&app_config.word_file, app_config.category.as_deref());
     if words.is_empty() {
-        eprintln!(
+        show_error(&format!(
             "No words found in '{}' (category: {:?})",
             app_config.word_file, app_config.category
-        );
+        ))
+        .await;
         return;
     }
 
@@ -148,22 +151,39 @@ async fn run_solo(app_config: &AppConfig) {
 async fn run_host(app_config: &AppConfig, relay_addr: &str) {
     let words = load_words(&app_config.word_file, app_config.category.as_deref());
     if words.is_empty() {
-        eprintln!(
+        show_error(&format!(
             "No words found in '{}' (category: {:?})",
             app_config.word_file, app_config.category
-        );
+        ))
+        .await;
         return;
     }
 
     let config = app_config.to_game_config();
 
     if let Err(e) = lobby::run_host_session(config, words, relay_addr, app_config).await {
-        eprintln!("Error: {}", e);
+        show_error(&format!("{}", e)).await;
     }
 }
 
 async fn run_join(app_config: &AppConfig, relay_addr: &str, room_code: &str) {
     if let Err(e) = lobby::run_joiner_session(relay_addr, room_code, app_config).await {
-        eprintln!("Error: {}", e);
+        show_error(&format!("{}", e)).await;
+    }
+}
+
+async fn show_error(msg: &str) {
+    let _guard = render::TerminalGuard::new();
+    let term_size = render::terminal_size();
+    render::render_error(msg, term_size);
+
+    // Wait for any keypress
+    let mut reader = EventStream::new();
+    while let Some(Ok(event)) = reader.next().await {
+        if let Event::Key(key) = event {
+            if key.kind == KeyEventKind::Press {
+                break;
+            }
+        }
     }
 }

@@ -56,7 +56,7 @@ pub async fn menu_loop(config: &mut AppConfig) -> MenuAction {
                     KeyCode::Enter => match selected {
                         0 => return MenuAction::Solo,
                         1 => {
-                            let result = run_server_connect(config, true, &mut reader).await;
+                            let result = run_server_connect(&mut *config, true, &mut reader).await;
                             match result {
                                 ServerConnectResult::Selected(addr) => {
                                     config.push_recent_server(&addr);
@@ -69,7 +69,7 @@ pub async fn menu_loop(config: &mut AppConfig) -> MenuAction {
                             continue;
                         }
                         2 => {
-                            let result = run_server_connect(config, false, &mut reader).await;
+                            let result = run_server_connect(&mut *config, false, &mut reader).await;
                             match result {
                                 ServerConnectResult::Selected(addr) => {
                                     config.push_recent_server(&addr);
@@ -350,6 +350,30 @@ async fn run_category_picker(
     }
 }
 
+// ─── Address validation ─────────────────────────────────────────────
+
+fn validate_address(addr: &str) -> Result<(), &'static str> {
+    if addr.is_empty() {
+        return Err("Address cannot be empty");
+    }
+    let Some(colon_pos) = addr.rfind(':') else {
+        return Err("Missing port — use host:port (e.g. 192.168.1.5:7878)");
+    };
+    let host = &addr[..colon_pos];
+    let port_str = &addr[colon_pos + 1..];
+    if host.is_empty() {
+        return Err("Host cannot be empty");
+    }
+    if port_str.is_empty() {
+        return Err("Port cannot be empty — use host:port (e.g. server:7878)");
+    }
+    match port_str.parse::<u16>() {
+        Ok(0) => Err("Port must be between 1 and 65535"),
+        Ok(_) => Ok(()),
+        Err(_) => Err("Port must be a number (e.g. 7878)"),
+    }
+}
+
 // ─── Server connect ─────────────────────────────────────────────────
 
 enum ServerConnectResult {
@@ -358,18 +382,23 @@ enum ServerConnectResult {
 }
 
 async fn run_server_connect(
-    config: &AppConfig,
+    config: &mut AppConfig,
     hosting: bool,
     reader: &mut EventStream,
 ) -> ServerConnectResult {
     let mut input_buf = String::new();
     let mut editing = true;
-    // selectable items: text input + each recent server + Back
-    let recent_count = config.recent_servers.len();
-    let total_selectable = 1 + recent_count + 1; // input + recents + Back
+    let mut error_msg: Option<&'static str> = None;
     let mut selected: usize = 0; // 0 = text input
 
     loop {
+        // Recalculate selectable count each iteration (recent servers don't change
+        // during this screen, but Settings is only present when hosting)
+        let recent_count = config.recent_servers.len();
+        // selectable: text input + recent servers + [Settings if hosting] + Back
+        let settings_offset = if hosting { 1 } else { 0 };
+        let total_selectable = 1 + recent_count + settings_offset + 1;
+
         let term_size = render::terminal_size();
         let title = if hosting {
             "HOST — RELAY SERVER"
@@ -384,6 +413,10 @@ async fn run_server_connect(
             editing: editing && selected == 0,
         });
 
+        if let Some(err) = error_msg {
+            items.push(MenuItem::Error(err));
+        }
+
         if !config.recent_servers.is_empty() {
             items.push(MenuItem::Label(""));
             items.push(MenuItem::Label("Recent servers:"));
@@ -393,6 +426,9 @@ async fn run_server_connect(
         }
 
         items.push(MenuItem::Label(""));
+        if hosting {
+            items.push(MenuItem::Action("Settings"));
+        }
         items.push(MenuItem::Action("Back"));
 
         render::render_menu(title, &items, selected, term_size);
@@ -407,22 +443,28 @@ async fn run_server_connect(
                 match key.code {
                     KeyCode::Enter => {
                         let addr = input_buf.trim().to_string();
-                        if !addr.is_empty() {
-                            return ServerConnectResult::Selected(addr);
+                        match validate_address(&addr) {
+                            Ok(()) => return ServerConnectResult::Selected(addr),
+                            Err(e) => {
+                                error_msg = Some(e);
+                            }
                         }
-                        editing = false;
                     }
                     KeyCode::Esc => {
                         editing = false;
+                        error_msg = None;
                     }
                     KeyCode::Backspace => {
                         input_buf.pop();
+                        error_msg = None;
                     }
                     KeyCode::Char(c) => {
                         input_buf.push(c);
+                        error_msg = None;
                     }
                     KeyCode::Down | KeyCode::Tab => {
                         editing = false;
+                        error_msg = None;
                         selected = (selected + 1) % total_selectable;
                     }
                     _ => {}
@@ -443,8 +485,11 @@ async fn run_server_connect(
                         // Activate text input editing
                         editing = true;
                     } else if selected == total_selectable - 1 {
-                        // Back
+                        // Back (always last)
                         return ServerConnectResult::Back;
+                    } else if hosting && selected == total_selectable - 2 {
+                        // Settings (second to last when hosting)
+                        run_settings_inline(config, reader).await;
                     } else {
                         // Recent server
                         let server_idx = selected - 1;
@@ -459,6 +504,28 @@ async fn run_server_connect(
                     return ServerConnectResult::Back;
                 }
                 _ => {}
+            }
+        }
+    }
+}
+
+/// Run the full settings screen inline (used from server connect when hosting).
+async fn run_settings_inline(config: &mut AppConfig, reader: &mut EventStream) {
+    let mut selected: usize = 0;
+    loop {
+        let term_size = render::terminal_size();
+        render_settings_menu(config, selected, term_size);
+
+        let result = run_settings_screen(config, &mut selected, reader).await;
+        match result {
+            SettingsResult::Continue => continue,
+            SettingsResult::Back => return,
+            SettingsResult::OpenCategoryPicker => {
+                let categories = crate::load_categories(&config.word_file);
+                let pick = run_category_picker(&categories, config, reader).await;
+                if let Some(cat) = pick {
+                    config.category = cat;
+                }
             }
         }
     }

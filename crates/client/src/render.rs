@@ -24,11 +24,12 @@ pub enum MenuItem<'a> {
         value: &'a str,
         editing: bool,
     },
+    Error(&'a str),
 }
 
 impl MenuItem<'_> {
     pub fn is_selectable(&self) -> bool {
-        !matches!(self, MenuItem::Label(_))
+        !matches!(self, MenuItem::Label(_) | MenuItem::Error(_))
     }
 }
 
@@ -39,7 +40,7 @@ pub fn render_menu(title: &str, items: &[MenuItem], selected: usize, term_size: 
     let item_widths: Vec<usize> = items
         .iter()
         .map(|item| match item {
-            MenuItem::Label(s) | MenuItem::Action(s) => s.len(),
+            MenuItem::Label(s) | MenuItem::Action(s) | MenuItem::Error(s) => s.len(),
             MenuItem::Setting { label, value } => label.len() + value.len() + 4,
             MenuItem::TextInput {
                 label,
@@ -89,14 +90,16 @@ pub fn render_menu(title: &str, items: &[MenuItem], selected: usize, term_size: 
             selectable_idx += 1;
         }
 
-        if is_selected {
+        if matches!(item, MenuItem::Error(_)) {
+            let _ = queue!(stdout(), SetColors(Colors::new(Red, Blue)));
+        } else if is_selected {
             let _ = queue!(stdout(), SetColors(Colors::new(DarkYellow, Black)));
         } else {
             let _ = queue!(stdout(), SetColors(Colors::new(White, Blue)));
         }
 
         let text = match item {
-            MenuItem::Label(s) => format!("  {}", s),
+            MenuItem::Label(s) | MenuItem::Error(s) => format!("  {}", s),
             MenuItem::Action(s) => {
                 if is_selected {
                     format!("> {}", s)
@@ -131,8 +134,8 @@ pub fn render_menu(title: &str, items: &[MenuItem], selected: usize, term_size: 
 
         print!("│ {:<width$} │", text, width = content_width - 4);
 
-        // Reset colors after selected item
-        if is_selected {
+        // Reset colors after highlighted items
+        if is_selected || matches!(item, MenuItem::Error(_)) {
             let _ = queue!(stdout(), SetColors(Colors::new(White, Blue)));
         }
     }
@@ -599,4 +602,9 @@ pub fn render_post_game_menu(term_size: (u16, u16)) {
 pub fn render_message(msg: &str, term_size: (u16, u16)) {
     let lines = [msg];
     render_centered_box(&lines, term_size, Blue);
+}
+
+pub fn render_error(msg: &str, term_size: (u16, u16)) {
+    let lines = ["ERROR", "", msg, "", "Press any key to continue..."];
+    render_centered_box(&lines, term_size, Red);
 }
