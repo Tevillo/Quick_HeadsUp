@@ -2,7 +2,7 @@
 
 ## Context
 
-The game is currently single-device only. The goal is to add a networked two-player mode where one person (Viewer) sees the word and gives verbal clues, while the other person (Holder) guesses and presses y/n — just like the real Heads Up game but across two terminals on different networks. A relay server running on the user's always-online server bridges the two clients. Players can switch roles between games within a session.
+The game is currently single-device only. The goal is to add a networked two-player mode where one person (Viewer) sees the word and gives verbal clues, while the other person (Holder) guesses and presses y/n — just like the real Guess Up game but across two terminals on different networks. A relay server running on the user's always-online server bridges the two clients. Players can switch roles between games within a session.
 
 ## Architecture Overview
 
@@ -26,7 +26,7 @@ The game is currently single-device only. The goal is to add a networked two-pla
 Convert the single crate into a workspace with three crates:
 
 ```
-Quick_HeadsUp/
+Guess-Up/
   Cargo.toml                  # workspace root
   files/ASOIAF_list.txt
   crates/
@@ -61,7 +61,7 @@ Move the existing single-package project into a workspace layout.
 - Existing `src/` moves to `crates/client/src/`
 - Existing dependencies move to `crates/client/Cargo.toml`
 - `files/` stays at the repo root; the client references it with a relative path (update default in clap arg)
-- Verify: `cargo build -p heads_up` and `cargo run -p heads_up` work identically to today
+- Verify: `cargo build -p guess_up` and `cargo run -p guess_up` work identically to today
 
 **Files modified:** `Cargo.toml` (rewrite), new `crates/client/Cargo.toml`, `crates/client/src/main.rs` (word file default path)
 
@@ -176,9 +176,9 @@ struct Room {
 Add clap subcommands. Default (no subcommand) runs solo mode for backwards compat.
 
 ```
-heads_up                                    # solo mode (existing behavior)
-heads_up host --relay addr:port             # create room, display code, wait for peer
-heads_up join --relay addr:port --code XXXX # join existing room
+guess_up                                    # solo mode (existing behavior)
+guess_up host --relay addr:port             # create room, display code, wait for peer
+guess_up join --relay addr:port --code XXXX # join existing room
 ```
 
 Game flags (`-g`, `-s`, `-l`, `-x`, `--bonus-seconds`, `-w`, `--category`) apply to solo and host modes. The joiner receives config from the host.
@@ -339,10 +339,10 @@ Existing `render_question`, `render_question_unlimited`, `flash_*`, `print_outpu
 
 | Step | What | Testable? |
 |------|-------|-----------|
-| 1 | Workspace restructure | `cargo run -p heads_up` works identically |
+| 1 | Workspace restructure | `cargo run -p guess_up` works identically |
 | 2 | Protocol crate | Unit tests for serialization round-trips |
 | 3 | Relay server | Manual test: two `nc` / test clients create + join rooms |
-| 4 | CLI subcommands | `heads_up host/join` parse args, connect to relay, show room code |
+| 4 | CLI subcommands | `guess_up host/join` parse args, connect to relay, show room code |
 | 5 | net.rs + types.rs | Two clients connect, see "peer joined" |
 | 6 | lobby.rs | Role selection works, both sides agree on roles |
 | 7 | Host game loop networking | Host plays full game, remote receives messages (not rendered yet) |
@@ -352,7 +352,7 @@ Existing `render_question`, `render_question_unlimited`, `flash_*`, `print_outpu
 
 ## Verification
 
-1. **Solo mode regression**: `cargo run -p heads_up` — all existing scenarios still work
+1. **Solo mode regression**: `cargo run -p guess_up` — all existing scenarios still work
 2. **Relay**: Start relay, verify room create/join with two terminals
 3. **Full networked game**: Host creates room, joiner enters code, roles assigned, play a full game, verify both sides show correct views
 4. **Role swap**: After game, swap roles, play again — verify views switch

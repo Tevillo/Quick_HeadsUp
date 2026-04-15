@@ -1,6 +1,6 @@
-# Heads Up! - ASOIAF Edition
+# Guess Up! - ASOIAF Edition
 
-A terminal-based "Heads Up" party game themed around A Song of Ice and Fire. Play solo (hold the screen to your forehead while friends give clues) or networked (two players on different machines connected through a relay server).
+A terminal-based "Guess Up" party game themed around A Song of Ice and Fire. Play solo (hold the screen to your forehead while friends give clues) or networked (two players on different machines connected through a relay server).
 
 Press `y` for correct, `n` to pass — no Enter needed.
 
@@ -16,7 +16,7 @@ cargo build --release
 cargo run -p guess_up
 ```
 
-An interactive TUI menu lets you configure everything — game time, categories, extra-time mode, relay server address — without any command-line flags. Settings persist between sessions in `~/.heads_up_config.json`.
+An interactive TUI menu lets you configure everything — game time, categories, extra-time mode, relay server address — without any command-line flags. Settings persist between sessions in `~/.guess_up_config.json`.
 
 Press `q` at any time to quit. The terminal always restores cleanly, even on Ctrl+C.
 
@@ -52,17 +52,17 @@ The relay is a lightweight TCP server that forwards messages between the two pla
 cargo build --release -p relay
 
 # Copy to your server
-scp target/release/relay your-server:/usr/local/bin/heads-up-relay
+scp target/release/relay your-server:/usr/local/bin/guess-up-relay
 ```
 
 **Run it:**
 
 ```bash
 # Simplest form (binds to 0.0.0.0:7878)
-heads-up-relay
+guess-up-relay
 
 # Custom options
-heads-up-relay --bind 0.0.0.0:9000 --max-rooms 50 --room-timeout 1800
+guess-up-relay --bind 0.0.0.0:9000 --max-rooms 50 --room-timeout 1800
 ```
 
 | Flag | Default | Description |
@@ -79,15 +79,15 @@ sudo ufw allow 7878/tcp
 
 **Run as a systemd service (optional):**
 
-Create `/etc/systemd/system/heads-up-relay.service`:
+Create `/etc/systemd/system/guess-up-relay.service`:
 
 ```ini
 [Unit]
-Description=Heads Up Relay Server
+Description=Guess Up Relay Server
 After=network.target
 
 [Service]
-ExecStart=/usr/local/bin/heads-up-relay --bind 0.0.0.0:7878
+ExecStart=/usr/local/bin/guess-up-relay --bind 0.0.0.0:7878
 Restart=on-failure
 User=nobody
 Group=nogroup
@@ -98,17 +98,17 @@ WantedBy=multi-user.target
 
 ```bash
 sudo systemctl daemon-reload
-sudo systemctl enable --now heads-up-relay
+sudo systemctl enable --now guess-up-relay
 ```
 
 **Check logs:**
 
 ```bash
 # Direct — tracing output goes to stderr
-RUST_LOG=info heads-up-relay
+RUST_LOG=info guess-up-relay
 
 # Systemd
-journalctl -u heads-up-relay -f
+journalctl -u guess-up-relay -f
 ```
 
 **Verify connectivity from a client machine:**
@@ -150,12 +150,12 @@ Lines are trimmed and deduplicated automatically.
 ## Game Features
 
 - **Interactive TUI menu** — configure all settings from the game, no CLI flags needed
-- **Persistent settings** — saved to `~/.heads_up_config.json` between sessions
+- **Persistent settings** — saved to `~/.guess_up_config.json` between sessions
 - **Single-keypress input** — `y`/`n`/`q` register instantly, no Enter required
 - **Green/red flash** — visual feedback on correct/pass
 - **Live timer and score** — updated every second
 - **End-of-round summary** — score, accuracy %, pace, and missed words
-- **Game history** — results saved to `~/.heads_up_history.json`
+- **Game history** — results saved to `~/.guess_up_history.json`
 - **Category filtering** — scrollable picker with all 25 categories
 - **Networked play** — two players on different machines via relay server
 - **Role selection** — host picks Viewer or Holder, swap after each game
@@ -187,7 +187,7 @@ Network Task (TCP via relay)       ---> tx --+  (networked mode only)
 | Module | Responsibility |
 |--------|---------------|
 | `main.rs` | Word loading, game runners (solo/host/join), entry point |
-| `config.rs` | `AppConfig` — persistent settings, load/save `~/.heads_up_config.json` |
+| `config.rs` | `AppConfig` — persistent settings, load/save `~/.guess_up_config.json` |
 | `menu.rs` | TUI menu system — main menu, settings, server connect, room code screens |
 | `types.rs` | Event types, game config, result structs |
 | `game.rs` | Game state, main loop (solo + host), remote game loop |

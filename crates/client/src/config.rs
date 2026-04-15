@@ -2,7 +2,7 @@ use crate::types::{GameConfig, GameMode};
 use serde::{Deserialize, Serialize};
 use std::fs;
 
-const CONFIG_FILENAME: &str = ".heads_up_config.json";
+const CONFIG_FILENAME: &str = ".guess_up_config.json";
 const MAX_RECENT_SERVERS: usize = 10;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

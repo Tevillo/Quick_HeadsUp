@@ -8,7 +8,7 @@ The client currently uses clap to parse CLI args for all game settings and netwo
 
 | File | Purpose |
 |------|---------|
-| `crates/client/src/config.rs` | `AppConfig` struct, defaults, load/save `~/.heads_up_config.json`, `to_game_config()` |
+| `crates/client/src/config.rs` | `AppConfig` struct, defaults, load/save `~/.guess_up_config.json`, `to_game_config()` |
 | `crates/client/src/menu.rs` | Menu state machine, rendering, input handling, `menu_loop()` → `MenuAction` |
 
 ## Modified Files
@@ -21,7 +21,7 @@ The client currently uses clap to parse CLI args for all game settings and netwo
 | `Cargo.toml` | Remove `clap` dependency. |
 | No changes to: `types.rs`, `game.rs`, `input.rs`, `timer.rs`, `net.rs` |
 
-## Config File (`~/.heads_up_config.json`)
+## Config File (`~/.guess_up_config.json`)
 
 ```rust
 #[derive(Debug, Clone, Serialize, Deserialize)]
