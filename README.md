@@ -12,63 +12,34 @@ Requires [Rust](https://www.rust-lang.org/tools/install). If you run into versio
 # Build everything (client + relay server)
 cargo build --release
 
-# Play solo — default 60-second game
-cargo run -p heads_up
-
-# Or play networked (see sections below)
-cargo run -p heads_up -- host --relay your-server:7878
-cargo run -p heads_up -- join --relay your-server:7878 --code ABCDE
+# Launch the game
+cargo run -p guess_up
 ```
+
+An interactive TUI menu lets you configure everything — game time, categories, extra-time mode, relay server address — without any command-line flags. Settings persist between sessions in `~/.heads_up_config.json`.
 
 Press `q` at any time to quit. The terminal always restores cleanly, even on Ctrl+C.
 
 ## Solo Mode
 
-When you run without a subcommand, you get the original single-device experience:
-
-```bash
-cargo run -p heads_up                              # default 60-second game
-cargo run -p heads_up -- -g 90                     # 90-second game
-cargo run -p heads_up -- -s                        # skip the 3-2-1 countdown
-cargo run -p heads_up -- -l                        # unlimited time on the last question
-cargo run -p heads_up -- -x                        # extra-time mode (correct answers add time)
-cargo run -p heads_up -- -x --bonus-seconds 3      # add 3s per correct answer
-cargo run -p heads_up -- --category "House Stark"  # only House Stark entries
-cargo run -p heads_up -- -w my_words.txt           # use a custom word list
-```
+Select **Solo Game** from the main menu. Adjust settings (game time, category, extra-time mode, etc.) via the **Settings** screen before starting.
 
 ## Networked Mode
 
-Two players connect through a relay server. One player **hosts** a room (owns the game state, timer, and word list) and the other **joins** with a room code. After connecting, the host picks roles:
+Two players connect through a relay server. One player **hosts** a room (owns the game state, timer, and word list) and the other **joins** with a room code.
+
+### Hosting a Game
+
+Select **Host Game** from the main menu, then enter your relay server address (e.g. `your-server:7878`). The host lobby shows the room code and lets you adjust **Settings** while waiting for an opponent. Once a joiner connects, pick your role:
 
 - **Viewer** — sees the word on screen and gives verbal clues
 - **Holder** — guesses based on clues and presses `y`/`n`
 
-After each game, both players get a post-game menu to play again, swap roles, or quit.
-
-### Hosting a Game
-
-```bash
-cargo run -p heads_up -- host --relay your-server:7878
-```
-
-This connects to the relay, creates a room, and displays a 5-letter room code (e.g. `STARK`). Share this code with your opponent. Once they join, you'll pick your role and the game starts.
-
-All solo-mode flags work with `host` too:
-
-```bash
-cargo run -p heads_up -- -g 90 -x --bonus-seconds 3 host --relay your-server:7878
-```
-
-The host controls the game config — the joiner receives it automatically.
+After each game, the host gets a post-game menu to play again, swap roles, or quit. The room stays alive across games — no need to reconnect.
 
 ### Joining a Game
 
-```bash
-cargo run -p heads_up -- join --relay your-server:7878 --code STARK
-```
-
-Enter the room code the host gave you (case-insensitive). You'll see your assigned role, then the game starts. The joiner doesn't need to specify game flags — the host's settings are used.
+Select **Join Game** from the main menu, enter the relay server address, then type the room code the host gave you. If the code is wrong, the error appears inline so you can fix it and retry. After the game, you stay in the lobby and can join another round when the host starts one.
 
 ### Relay Server Setup
 
@@ -146,17 +117,20 @@ journalctl -u heads-up-relay -f
 nc -zv your-server 7878
 ```
 
-## CLI Flags
+## Menu Navigation
 
-| Flag | Default | Description |
-|------|---------|-------------|
-| `-g, --game-time <seconds>` | 60 | Game length in seconds |
-| `-s, --skip-countdown` | off | Skip the 3-2-1 countdown |
-| `-l, --last-unlimited` | off | Give unlimited time on the final question |
-| `-x, --extra-time` | off | Correct answers add bonus time |
-| `--bonus-seconds <n>` | 5 | Seconds added per correct answer (with `-x`) |
-| `-w, --word-file <path>` | `files/ASOIAF_list.txt` | Path to a word list file |
-| `--category <name>` | all | Filter to a specific category |
+All menus use the same controls:
+
+| Key | Action |
+|-----|--------|
+| `↑` / `k` | Move selection up |
+| `↓` / `j` | Move selection down |
+| `Enter` | Select / confirm |
+| `Esc` / `q` | Go back / quit |
+| `←` / `h` | Decrease value (settings) |
+| `→` / `l` | Increase value (settings) |
+
+In text input fields (server address, room code), type normally. `Enter` confirms, `Esc` cancels.
 
 ## Word List Format
 
@@ -175,15 +149,19 @@ Lines are trimmed and deduplicated automatically.
 
 ## Game Features
 
+- **Interactive TUI menu** — configure all settings from the game, no CLI flags needed
+- **Persistent settings** — saved to `~/.heads_up_config.json` between sessions
 - **Single-keypress input** — `y`/`n`/`q` register instantly, no Enter required
 - **Green/red flash** — visual feedback on correct/pass
 - **Live timer and score** — updated every second
 - **End-of-round summary** — score, accuracy %, pace, and missed words
 - **Game history** — results saved to `~/.heads_up_history.json`
-- **Category filtering** — play with only the entries you want
+- **Category filtering** — scrollable picker with all 25 categories
 - **Networked play** — two players on different machines via relay server
 - **Role selection** — host picks Viewer or Holder, swap after each game
-- **Post-game menu** — play again, swap roles, or quit
+- **Post-game menu** — play again, swap roles, or quit (room stays alive)
+- **Address validation** — relay addresses validated before connecting
+- **Recent servers** — last 10 relay addresses remembered
 
 ## Architecture
 
@@ -208,7 +186,9 @@ Network Task (TCP via relay)       ---> tx --+  (networked mode only)
 
 | Module | Responsibility |
 |--------|---------------|
-| `main.rs` | CLI args, word loading, channel setup, task spawning |
+| `main.rs` | Word loading, game runners (solo/host/join), entry point |
+| `config.rs` | `AppConfig` — persistent settings, load/save `~/.heads_up_config.json` |
+| `menu.rs` | TUI menu system — main menu, settings, server connect, room code screens |
 | `types.rs` | Event types, game config, result structs |
 | `game.rs` | Game state, main loop (solo + host), remote game loop |
 | `input.rs` | Async single-keypress input via crossterm |
