@@ -177,6 +177,9 @@ async fn wait_for_peer(
                 if key.kind != KeyEventKind::Press {
                     continue;
                 }
+                if crate::input::is_ctrl_c(&key) {
+                    crate::render::force_exit();
+                }
                 match key.code {
                     KeyCode::Up | KeyCode::Char('k') => {
                         selected = selected.checked_sub(1).unwrap_or(count - 1);
@@ -317,6 +320,9 @@ pub async fn run_joiner_session(mut conn: NetConnection, room_code: &str) -> io:
                 tokio::select! {
                     event = reader.next() => {
                         if let Some(Ok(Event::Key(key))) = event {
+                            if key.kind == KeyEventKind::Press && crate::input::is_ctrl_c(&key) {
+                                crate::render::force_exit();
+                            }
                             if key.kind == KeyEventKind::Press
                                 && matches!(key.code, KeyCode::Char('q') | KeyCode::Char('Q') | KeyCode::Esc)
                             {
@@ -453,6 +459,9 @@ async fn select_role(app_config: &mut AppConfig) -> Role {
         if key.kind != KeyEventKind::Press {
             continue;
         }
+        if crate::input::is_ctrl_c(&key) {
+            crate::render::force_exit();
+        }
         match key.code {
             KeyCode::Up | KeyCode::Char('k') => {
                 selected = selected.checked_sub(1).unwrap_or(count - 1);
@@ -492,6 +501,9 @@ async fn run_post_game_menu(conn: &mut NetConnection) -> io::Result<PostGameActi
                 if let Some(Ok(Event::Key(key))) = event {
                     if key.kind != KeyEventKind::Press {
                         continue;
+                    }
+                    if crate::input::is_ctrl_c(&key) {
+                        crate::render::force_exit();
                     }
                     match key.code {
                         KeyCode::Char('p') | KeyCode::Char('P') => {

@@ -155,6 +155,9 @@ pub async fn show_error(msg: &str) {
     while let Some(Ok(event)) = reader.next().await {
         if let Event::Key(key) = event {
             if key.kind == KeyEventKind::Press {
+                if input::is_ctrl_c(&key) {
+                    render::force_exit();
+                }
                 break;
             }
         }

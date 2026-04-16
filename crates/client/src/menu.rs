@@ -39,6 +39,9 @@ pub async fn menu_loop(config: &mut AppConfig) {
                 if key.kind != KeyEventKind::Press {
                     continue;
                 }
+                if crate::input::is_ctrl_c(&key) {
+                    crate::render::force_exit();
+                }
                 match key.code {
                     KeyCode::Up | KeyCode::Char('k') => {
                         selected = selected.checked_sub(1).unwrap_or(count - 1);
@@ -258,6 +261,9 @@ async fn run_settings_screen(
         if key.kind != KeyEventKind::Press {
             return SettingsResult::Continue;
         }
+        if crate::input::is_ctrl_c(&key) {
+            crate::render::force_exit();
+        }
         match key.code {
             KeyCode::Up | KeyCode::Char('k') => {
                 *selected = selected.checked_sub(1).unwrap_or(SETTINGS_COUNT - 1);
@@ -358,6 +364,9 @@ async fn run_category_picker(
         if let Some(Ok(Event::Key(key))) = reader.next().await {
             if key.kind != KeyEventKind::Press {
                 continue;
+            }
+            if crate::input::is_ctrl_c(&key) {
+                crate::render::force_exit();
             }
             match key.code {
                 KeyCode::Up | KeyCode::Char('k') => {
@@ -468,6 +477,9 @@ async fn run_server_connect(
         if let Some(Ok(Event::Key(key))) = reader.next().await {
             if key.kind != KeyEventKind::Press {
                 continue;
+            }
+            if crate::input::is_ctrl_c(&key) {
+                crate::render::force_exit();
             }
 
             // If we're editing text input
@@ -602,6 +614,9 @@ async fn run_join_room(relay_addr: &str, reader: &mut EventStream) -> JoinRoomRe
             if key.kind != KeyEventKind::Press {
                 continue;
             }
+            if crate::input::is_ctrl_c(&key) {
+                crate::render::force_exit();
+            }
 
             if editing && selected == 0 {
                 match key.code {
@@ -693,6 +708,9 @@ async fn run_text_input(prompt: &str, initial: &str, reader: &mut EventStream) -
         if let Some(Ok(Event::Key(key))) = reader.next().await {
             if key.kind != KeyEventKind::Press {
                 continue;
+            }
+            if crate::input::is_ctrl_c(&key) {
+                crate::render::force_exit();
             }
             match key.code {
                 KeyCode::Enter => return Some(buf),
