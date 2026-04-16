@@ -260,6 +260,13 @@ impl Drop for TerminalGuard {
     }
 }
 
+/// Immediately exit the process, restoring terminal state first.
+pub fn force_exit() -> ! {
+    let _ = execute!(stdout(), Show, LeaveAlternateScreen);
+    let _ = terminal::disable_raw_mode();
+    std::process::exit(0);
+}
+
 pub fn terminal_size() -> (u16, u16) {
     terminal::size().unwrap_or((80, 24))
 }
