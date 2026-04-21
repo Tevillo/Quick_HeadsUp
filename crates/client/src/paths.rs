@@ -21,6 +21,10 @@ pub fn lists_dir() -> io::Result<PathBuf> {
     Ok(install_dir()?.join("lists"))
 }
 
+pub fn config_path() -> io::Result<PathBuf> {
+    Ok(install_dir()?.join(".guess_up_config.json"))
+}
+
 pub fn ensure_history_dir() -> io::Result<PathBuf> {
     let dir = history_dir()?;
     let existed = dir.exists();
@@ -34,7 +38,7 @@ pub fn ensure_history_dir() -> io::Result<PathBuf> {
 // On Linux/macOS the leading "." already hides the directory. On Windows
 // the dot prefix has no effect — we need to set FILE_ATTRIBUTE_HIDDEN.
 #[cfg(windows)]
-fn mark_hidden(path: &Path) {
+pub fn mark_hidden(path: &Path) {
     use std::os::windows::ffi::OsStrExt;
     use windows_sys::Win32::Storage::FileSystem::{SetFileAttributesW, FILE_ATTRIBUTE_HIDDEN};
 
@@ -51,7 +55,7 @@ fn mark_hidden(path: &Path) {
 }
 
 #[cfg(not(windows))]
-fn mark_hidden(_path: &Path) {}
+pub fn mark_hidden(_path: &Path) {}
 
 /// Returns sorted `.txt` filenames (not full paths) in `lists/`.
 /// Err if `lists/` is missing. Ok(empty vec) if it exists but has no `.txt` files —

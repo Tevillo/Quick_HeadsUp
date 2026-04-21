@@ -1,7 +1,8 @@
+use crate::theme;
 use crate::types::{EventSender, GameEvent};
 use crossterm::cursor::{DisableBlinking, Hide, MoveTo, Show};
 use crossterm::style::{
-    Color::{self, Black, Blue, DarkYellow, Green, Magenta, Red, White},
+    Color::{self, Green, Red},
     Colors, SetColors,
 };
 use crossterm::terminal::{self, Clear, EnterAlternateScreen, LeaveAlternateScreen};
@@ -9,6 +10,43 @@ use crossterm::{execute, queue};
 use protocol::Role;
 use std::io::{stdout, Write};
 use std::time::Duration;
+
+// ─── Scheme color helpers ────────────────────────────────────────────
+
+fn fg_on_primary() -> Colors {
+    let s = theme::active();
+    Colors::new(s.primary_fg, s.primary_bg)
+}
+
+fn accent_on_primary() -> Colors {
+    let s = theme::active();
+    Colors::new(s.accent_fg, s.primary_bg)
+}
+
+fn accent_on_selection() -> Colors {
+    let s = theme::active();
+    Colors::new(s.accent_fg, s.selection_bg)
+}
+
+fn error_panel() -> Colors {
+    let s = theme::active();
+    Colors::new(s.primary_fg, s.error_bg)
+}
+
+fn summary_border_colors() -> Colors {
+    let s = theme::active();
+    Colors::new(s.summary_border, s.summary_bg)
+}
+
+fn summary_accent_colors() -> Colors {
+    let s = theme::active();
+    Colors::new(s.summary_accent, s.summary_bg)
+}
+
+fn summary_success_colors() -> Colors {
+    let s = theme::active();
+    Colors::new(s.summary_success, s.summary_bg)
+}
 
 // ─── Menu rendering ─────────────────────────────────────────────────
 
@@ -62,7 +100,7 @@ pub fn render_menu(title: &str, items: &[MenuItem], selected: usize, term_size: 
 
     let _ = queue!(
         stdout(),
-        SetColors(Colors::new(White, Blue)),
+        SetColors(fg_on_primary()),
         Clear(terminal::ClearType::All),
         MoveTo(col, start_row),
     );
@@ -70,12 +108,12 @@ pub fn render_menu(title: &str, items: &[MenuItem], selected: usize, term_size: 
 
     // Title
     let _ = queue!(stdout(), MoveTo(col, start_row + 1));
-    let _ = queue!(stdout(), SetColors(Colors::new(DarkYellow, Blue)));
+    let _ = queue!(stdout(), SetColors(accent_on_primary()));
     print!("│ {:^width$} │", title, width = content_width - 4);
 
     // Blank line under title
     let _ = queue!(stdout(), MoveTo(col, start_row + 2));
-    let _ = queue!(stdout(), SetColors(Colors::new(White, Blue)));
+    let _ = queue!(stdout(), SetColors(fg_on_primary()));
     print!("│ {:width$} │", "", width = content_width - 4);
 
     // Track which selectable index we're at
@@ -91,11 +129,11 @@ pub fn render_menu(title: &str, items: &[MenuItem], selected: usize, term_size: 
         }
 
         if matches!(item, MenuItem::Error(_)) {
-            let _ = queue!(stdout(), SetColors(Colors::new(Red, Blue)));
+            let _ = queue!(stdout(), SetColors(accent_on_primary()));
         } else if is_selected {
-            let _ = queue!(stdout(), SetColors(Colors::new(DarkYellow, Black)));
+            let _ = queue!(stdout(), SetColors(accent_on_selection()));
         } else {
-            let _ = queue!(stdout(), SetColors(Colors::new(White, Blue)));
+            let _ = queue!(stdout(), SetColors(fg_on_primary()));
         }
 
         let text = match item {
@@ -136,14 +174,14 @@ pub fn render_menu(title: &str, items: &[MenuItem], selected: usize, term_size: 
 
         // Reset colors after highlighted items
         if is_selected || matches!(item, MenuItem::Error(_)) {
-            let _ = queue!(stdout(), SetColors(Colors::new(White, Blue)));
+            let _ = queue!(stdout(), SetColors(fg_on_primary()));
         }
     }
 
     // Bottom border
     let bottom_row = start_row + 3 + items.len() as u16;
     let _ = queue!(stdout(), MoveTo(col, bottom_row));
-    let _ = queue!(stdout(), SetColors(Colors::new(White, Blue)));
+    let _ = queue!(stdout(), SetColors(fg_on_primary()));
     print!("└{}┘", box_line);
 
     let _ = stdout().flush();
@@ -173,7 +211,7 @@ pub fn render_list_picker(
 
     let _ = queue!(
         stdout(),
-        SetColors(Colors::new(White, Blue)),
+        SetColors(fg_on_primary()),
         Clear(terminal::ClearType::All),
         MoveTo(col, start_row),
     );
@@ -181,12 +219,12 @@ pub fn render_list_picker(
 
     // Title
     let _ = queue!(stdout(), MoveTo(col, start_row + 1));
-    let _ = queue!(stdout(), SetColors(Colors::new(DarkYellow, Blue)));
+    let _ = queue!(stdout(), SetColors(accent_on_primary()));
     print!("│ {:^width$} │", title, width = content_width - 4);
 
     // Scroll indicator top
     let _ = queue!(stdout(), MoveTo(col, start_row + 2));
-    let _ = queue!(stdout(), SetColors(Colors::new(White, Blue)));
+    let _ = queue!(stdout(), SetColors(fg_on_primary()));
     if scroll_offset > 0 {
         print!("│ {:^width$} │", "▲ more ▲", width = content_width - 4);
     } else {
@@ -201,9 +239,9 @@ pub fn render_list_picker(
 
         let is_selected = idx == selected;
         if is_selected {
-            let _ = queue!(stdout(), SetColors(Colors::new(DarkYellow, Black)));
+            let _ = queue!(stdout(), SetColors(accent_on_selection()));
         } else {
-            let _ = queue!(stdout(), SetColors(Colors::new(White, Blue)));
+            let _ = queue!(stdout(), SetColors(fg_on_primary()));
         }
 
         let prefix = if is_selected { "> " } else { "  " };
@@ -211,14 +249,14 @@ pub fn render_list_picker(
         print!("│ {}{:<width$} │", prefix, name, width = content_width - 6);
 
         if is_selected {
-            let _ = queue!(stdout(), SetColors(Colors::new(White, Blue)));
+            let _ = queue!(stdout(), SetColors(fg_on_primary()));
         }
     }
 
     // Scroll indicator bottom
     let bottom_indicator_row = start_row + 3 + visible_count as u16;
     let _ = queue!(stdout(), MoveTo(col, bottom_indicator_row));
-    let _ = queue!(stdout(), SetColors(Colors::new(White, Blue)));
+    let _ = queue!(stdout(), SetColors(fg_on_primary()));
     if scroll_offset + visible_count < items.len() {
         print!("│ {:^width$} │", "▼ more ▼", width = content_width - 4);
     } else {
@@ -262,6 +300,182 @@ pub fn render_word_list_picker(
     );
 }
 
+// ─── Color scheme picker (list + live-preview panel) ────────────────
+
+pub fn render_color_scheme_picker(
+    items: &[String],
+    selected: usize,
+    scroll_offset: usize,
+    term_size: (u16, u16),
+    preview: &theme::ColorScheme,
+) {
+    let (tw, th) = term_size;
+    let visible_count = 15usize.min(items.len());
+
+    let list_title = "SELECT COLOR SCHEME";
+    let list_content_width = items
+        .iter()
+        .map(|c| c.len())
+        .max()
+        .unwrap_or(10)
+        .max(list_title.len())
+        + 6;
+    let list_height = (visible_count + 5) as u16;
+
+    let preview_content_width: usize = 36;
+    let preview_total_width = preview_content_width as u16 + 2; // side borders
+    let preview_rows = preview_sample_rows(preview, preview_content_width);
+    let preview_height = preview_rows.len() as u16 + 2; // top + bottom borders
+
+    let gap: u16 = 3;
+    let total_width = list_content_width as u16 + gap + preview_total_width;
+    let total_height = list_height.max(preview_height);
+    let start_row = th.saturating_sub(total_height) / 2;
+    let start_col = center_col(tw, total_width);
+    let list_col = start_col;
+    let preview_col = start_col + list_content_width as u16 + gap;
+
+    // Clear once in the active (already-committed) scheme.
+    let _ = queue!(
+        stdout(),
+        SetColors(fg_on_primary()),
+        Clear(terminal::ClearType::All),
+    );
+
+    // --- List box ---
+    let box_line: String = "―".repeat(list_content_width - 2);
+    let _ = queue!(
+        stdout(),
+        MoveTo(list_col, start_row),
+        SetColors(fg_on_primary()),
+    );
+    print!("┌{}┐", box_line);
+
+    let _ = queue!(
+        stdout(),
+        MoveTo(list_col, start_row + 1),
+        SetColors(accent_on_primary()),
+    );
+    print!("│ {:^width$} │", list_title, width = list_content_width - 4);
+
+    let _ = queue!(
+        stdout(),
+        MoveTo(list_col, start_row + 2),
+        SetColors(fg_on_primary()),
+    );
+    if scroll_offset > 0 {
+        print!("│ {:^width$} │", "▲ more ▲", width = list_content_width - 4);
+    } else {
+        print!("│ {:width$} │", "", width = list_content_width - 4);
+    }
+
+    for i in 0..visible_count {
+        let idx = scroll_offset + i;
+        let row = start_row + 3 + i as u16;
+        let _ = queue!(stdout(), MoveTo(list_col, row));
+        let is_selected = idx == selected;
+        if is_selected {
+            let _ = queue!(stdout(), SetColors(accent_on_selection()));
+        } else {
+            let _ = queue!(stdout(), SetColors(fg_on_primary()));
+        }
+        let prefix = if is_selected { "> " } else { "  " };
+        let name = &items[idx];
+        print!(
+            "│ {}{:<width$} │",
+            prefix,
+            name,
+            width = list_content_width - 6
+        );
+    }
+
+    let bottom_indicator_row = start_row + 3 + visible_count as u16;
+    let _ = queue!(
+        stdout(),
+        MoveTo(list_col, bottom_indicator_row),
+        SetColors(fg_on_primary()),
+    );
+    if scroll_offset + visible_count < items.len() {
+        print!("│ {:^width$} │", "▼ more ▼", width = list_content_width - 4);
+    } else {
+        print!("│ {:width$} │", "", width = list_content_width - 4);
+    }
+
+    let _ = queue!(stdout(), MoveTo(list_col, bottom_indicator_row + 1));
+    print!("└{}┘", box_line);
+
+    // --- Preview panel (uses hovered scheme's colors, wrapped in a border
+    //     drawn in the active scheme to mark it off from the surrounding UI) ---
+    let preview_border_line: String = "─".repeat(preview_content_width);
+    let right_border_col = preview_col + 1 + preview_content_width as u16;
+
+    let _ = queue!(
+        stdout(),
+        MoveTo(preview_col, start_row),
+        SetColors(fg_on_primary()),
+    );
+    print!("┌{}┐", preview_border_line);
+
+    for (i, (text, colors)) in preview_rows.iter().enumerate() {
+        let row = start_row + 1 + i as u16;
+
+        let _ = queue!(
+            stdout(),
+            MoveTo(preview_col, row),
+            SetColors(fg_on_primary()),
+        );
+        print!("│");
+
+        let _ = queue!(stdout(), MoveTo(preview_col + 1, row), SetColors(*colors));
+        print!("{}", text);
+
+        let _ = queue!(
+            stdout(),
+            MoveTo(right_border_col, row),
+            SetColors(fg_on_primary()),
+        );
+        print!("│");
+    }
+
+    let preview_bottom_row = start_row + 1 + preview_rows.len() as u16;
+    let _ = queue!(
+        stdout(),
+        MoveTo(preview_col, preview_bottom_row),
+        SetColors(fg_on_primary()),
+    );
+    print!("└{}┘", preview_border_line);
+
+    // Reset for following text output (if any) to the active scheme.
+    let _ = queue!(stdout(), SetColors(fg_on_primary()));
+    let _ = stdout().flush();
+}
+
+fn preview_sample_rows(scheme: &theme::ColorScheme, width: usize) -> Vec<(String, Colors)> {
+    let pri = Colors::new(scheme.primary_fg, scheme.primary_bg);
+    let title = Colors::new(scheme.accent_fg, scheme.primary_bg);
+    let sel = Colors::new(scheme.accent_fg, scheme.selection_bg);
+    let sum_border = Colors::new(scheme.summary_border, scheme.summary_bg);
+    let sum_accent = Colors::new(scheme.summary_accent, scheme.summary_bg);
+    let sum_success = Colors::new(scheme.summary_success, scheme.summary_bg);
+    let err = Colors::new(scheme.primary_fg, scheme.error_bg);
+    let pad = |s: &str| -> String { format!("{:<width$}", s, width = width) };
+    let heading = format!("  PREVIEW — {}", scheme.name);
+    vec![
+        (pad(&heading), title),
+        (pad(""), pri),
+        (pad("  Menu text"), pri),
+        (pad("  > Selected item"), sel),
+        (pad("  Title accent"), title),
+        (pad(""), pri),
+        (pad("  ═══ Summary ═══"), sum_border),
+        (pad("  Score: 42 / 50"), sum_accent),
+        (pad("  Perfect round!"), sum_success),
+        (pad(""), pri),
+        (pad("  ERROR sample"), err),
+        (pad(""), pri),
+    ]
+}
+
 pub struct TerminalGuard;
 
 impl TerminalGuard {
@@ -271,7 +485,7 @@ impl TerminalGuard {
             stdout(),
             EnterAlternateScreen,
             terminal::SetTitle("ASOIAF Guess Up"),
-            SetColors(Colors::new(White, Blue)),
+            SetColors(fg_on_primary()),
             DisableBlinking,
             Hide,
             Clear(terminal::ClearType::All),
@@ -317,7 +531,7 @@ pub fn render_question(word: &str, seconds_left: u64, score: usize, term_size: (
 
     let _ = queue!(
         stdout(),
-        SetColors(Colors::new(White, Blue)),
+        SetColors(fg_on_primary()),
         Clear(terminal::ClearType::All),
         MoveTo(col, mid_row),
     );
@@ -348,7 +562,7 @@ pub fn render_question_unlimited(word: &str, score: usize, term_size: (u16, u16)
 
     let _ = queue!(
         stdout(),
-        SetColors(Colors::new(White, Blue)),
+        SetColors(fg_on_primary()),
         Clear(terminal::ClearType::All),
         MoveTo(col, mid_row),
     );
@@ -367,13 +581,13 @@ pub fn render_question_unlimited(word: &str, score: usize, term_size: (u16, u16)
 pub async fn flash_screen(color: Color, tx: EventSender) {
     let _ = execute!(
         stdout(),
-        SetColors(Colors::new(Black, color)),
+        SetColors(Colors::new(Color::Black, color)),
         Clear(terminal::ClearType::All),
     );
     tokio::time::sleep(Duration::from_millis(150)).await;
     let _ = execute!(
         stdout(),
-        SetColors(Colors::new(White, Blue)),
+        SetColors(fg_on_primary()),
         Clear(terminal::ClearType::All),
     );
     let _ = tx.send(GameEvent::Redraw).await;
@@ -428,7 +642,7 @@ pub fn render_countdown(term_size: (u16, u16)) {
 
         let _ = queue!(
             stdout(),
-            SetColors(Colors::new(White, Blue)),
+            SetColors(fg_on_primary()),
             Clear(terminal::ClearType::All),
         );
         for (row, line) in lines.iter().enumerate() {
@@ -461,12 +675,12 @@ pub fn print_output(
         0.0
     };
 
-    let _ = execute!(stdout(), SetColors(Colors::new(Blue, Black)));
+    let _ = execute!(stdout(), SetColors(summary_border_colors()));
     println!("\n  ╔{}╗", divider);
     println!("  ║{:^50}║", "GAME OVER");
     println!("  ╠{}╣", divider);
 
-    let _ = execute!(stdout(), SetColors(Colors::new(DarkYellow, Black)));
+    let _ = execute!(stdout(), SetColors(summary_accent_colors()));
     println!(
         "  ║{:^50}║",
         format!("Score: {} / {}", score, total_questions)
@@ -479,19 +693,19 @@ pub fn print_output(
     println!("  ║{:^50}║", format!("Pace: {:.1} answers/min", pace));
 
     if all_used {
-        let _ = execute!(stdout(), SetColors(Colors::new(Green, Black)));
+        let _ = execute!(stdout(), SetColors(summary_success_colors()));
         println!("  ║{:^50}║", "You cleared the entire list!");
     }
 
-    let _ = execute!(stdout(), SetColors(Colors::new(Blue, Black)));
+    let _ = execute!(stdout(), SetColors(summary_border_colors()));
     println!("  ╠{}╣", divider);
 
     if missed_words.is_empty() {
-        let _ = execute!(stdout(), SetColors(Colors::new(DarkYellow, Black)));
+        let _ = execute!(stdout(), SetColors(summary_accent_colors()));
         println!("  ║{:^50}║", "No missed words — perfect round!");
     } else {
+        let _ = execute!(stdout(), SetColors(summary_accent_colors()));
         println!("  ║{:^50}║", "Missed words:");
-        let _ = execute!(stdout(), SetColors(Colors::new(DarkYellow, Black)));
         // Print missed words, wrapping lines to fit inside the box
         let mut line = String::new();
         for (i, word) in missed_words.iter().enumerate() {
@@ -509,7 +723,7 @@ pub fn print_output(
         }
     }
 
-    let _ = execute!(stdout(), SetColors(Colors::new(Blue, Black)));
+    let _ = execute!(stdout(), SetColors(summary_border_colors()));
     println!("  ╚{}╝\n", divider);
 }
 
@@ -529,7 +743,7 @@ pub fn render_holder_view(seconds_left: u64, score: usize, term_size: (u16, u16)
 
     let _ = queue!(
         stdout(),
-        SetColors(Colors::new(White, Magenta)),
+        SetColors(fg_on_primary()),
         Clear(terminal::ClearType::All),
         MoveTo(col, mid_row),
     );
@@ -547,7 +761,7 @@ pub fn render_holder_view(seconds_left: u64, score: usize, term_size: (u16, u16)
 
 // ─── Lobby rendering ─────────────────────────────────────────────────
 
-fn render_centered_box(lines: &[&str], term_size: (u16, u16), bg: Color) {
+fn render_centered_box(lines: &[&str], term_size: (u16, u16), colors: Colors) {
     let (tw, th) = term_size;
     let content_width = lines.iter().map(|l| l.len()).max().unwrap_or(20) + 4;
     let box_line: String = "―".repeat(content_width - 2);
@@ -557,7 +771,7 @@ fn render_centered_box(lines: &[&str], term_size: (u16, u16), bg: Color) {
 
     let _ = queue!(
         stdout(),
-        SetColors(Colors::new(White, bg)),
+        SetColors(colors),
         Clear(terminal::ClearType::All),
         MoveTo(col, start_row),
     );
@@ -580,7 +794,7 @@ pub fn render_joined_room(room_code: &str, term_size: (u16, u16)) {
         "",
         "Waiting for host...",
     ];
-    render_centered_box(&lines, term_size, Blue);
+    render_centered_box(&lines, term_size, fg_on_primary());
 }
 
 pub fn render_role_assigned(role: Role, term_size: (u16, u16)) {
@@ -597,7 +811,7 @@ pub fn render_role_assigned(role: Role, term_size: (u16, u16)) {
         "",
         "Game starting...",
     ];
-    render_centered_box(&lines, term_size, Blue);
+    render_centered_box(&lines, term_size, fg_on_primary());
 }
 
 pub fn render_post_game_menu(term_size: (u16, u16)) {
@@ -608,15 +822,15 @@ pub fn render_post_game_menu(term_size: (u16, u16)) {
         "[N] Pick next holder",
         "[Q] Quit session",
     ];
-    render_centered_box(&lines, term_size, Blue);
+    render_centered_box(&lines, term_size, fg_on_primary());
 }
 
 pub fn render_message(msg: &str, term_size: (u16, u16)) {
     let lines = [msg];
-    render_centered_box(&lines, term_size, Blue);
+    render_centered_box(&lines, term_size, fg_on_primary());
 }
 
 pub fn render_error(msg: &str, term_size: (u16, u16)) {
     let lines = ["ERROR", "", msg, "", "Press any key to continue..."];
-    render_centered_box(&lines, term_size, Red);
+    render_centered_box(&lines, term_size, error_panel());
 }

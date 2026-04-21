@@ -7,6 +7,7 @@ mod net;
 mod paths;
 mod render;
 mod terminal_spawn;
+mod theme;
 mod timer;
 mod types;
 
@@ -84,6 +85,7 @@ async fn main() {
     }
 
     let mut config = AppConfig::load();
+    theme::set_active(&config.color_scheme);
 
     match paths::list_available_lists() {
         Err(_) => {

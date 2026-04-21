@@ -1,8 +1,8 @@
+use crate::paths;
 use crate::types::{GameConfig, GameMode};
 use serde::{Deserialize, Serialize};
 use std::fs;
 
-const CONFIG_FILENAME: &str = ".guess_up_config.json";
 const MAX_RECENT_SERVERS: usize = 10;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -16,6 +16,7 @@ pub struct AppConfig {
     pub word_file: String,
     pub category: Option<String>,
     pub recent_servers: Vec<String>,
+    pub color_scheme: String,
 }
 
 impl Default for AppConfig {
@@ -29,16 +30,16 @@ impl Default for AppConfig {
             word_file: "ASOIAF_list.txt".to_string(),
             category: None,
             recent_servers: Vec::new(),
+            color_scheme: "stark".to_string(),
         }
     }
 }
 
 impl AppConfig {
     pub fn load() -> Self {
-        let Some(home) = dirs::home_dir() else {
+        let Ok(path) = paths::config_path() else {
             return Self::default();
         };
-        let path = home.join(CONFIG_FILENAME);
         match fs::read_to_string(&path) {
             Ok(data) => serde_json::from_str(&data).unwrap_or_default(),
             Err(_) => Self::default(),
@@ -46,12 +47,14 @@ impl AppConfig {
     }
 
     pub fn save(&self) {
-        let Some(home) = dirs::home_dir() else {
+        let Ok(path) = paths::config_path() else {
             return;
         };
-        let path = home.join(CONFIG_FILENAME);
+        let existed = path.exists();
         if let Ok(json) = serde_json::to_string_pretty(self) {
-            let _ = fs::write(&path, json);
+            if fs::write(&path, json).is_ok() && !existed {
+                paths::mark_hidden(&path);
+            }
         }
     }
 
