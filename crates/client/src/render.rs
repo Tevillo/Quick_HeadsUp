@@ -655,14 +655,24 @@ pub fn render_countdown(term_size: (u16, u16)) {
     let _ = execute!(stdout(), Clear(terminal::ClearType::All));
 }
 
-pub fn print_output(
+/// Render the end-of-game summary + a list of action hints inside the alt screen.
+///
+/// Callers own the `TerminalGuard`; this function draws a single centered box and
+/// does not clear it afterward. It's used by solo, host, and joiner flows —
+/// `actions` are the trailing lines below the stats (e.g. `"[P] Play again"`,
+/// `"Press any key to continue..."`, or `"Waiting for host..."`).
+pub fn render_game_summary(
     score: usize,
     total_questions: usize,
     missed_words: &[String],
     game_time: u64,
     all_used: bool,
+    actions: &[&str],
+    term_size: (u16, u16),
 ) {
-    let divider = "═".repeat(50);
+    let (tw, th) = term_size;
+    let inner: usize = 48; // text area width inside the box
+
     let passed = total_questions.saturating_sub(score);
     let accuracy = if total_questions > 0 {
         (score as f64 / total_questions as f64) * 100.0
@@ -675,56 +685,148 @@ pub fn print_output(
         0.0
     };
 
-    let _ = execute!(stdout(), SetColors(summary_border_colors()));
-    println!("\n  ╔{}╗", divider);
-    println!("  ║{:^50}║", "GAME OVER");
-    println!("  ╠{}╣", divider);
+    #[derive(Clone, Copy)]
+    enum RowKind {
+        Accent,
+        Success,
+        Divider,
+    }
+    let mut rows: Vec<(String, RowKind)> = Vec::new();
 
-    let _ = execute!(stdout(), SetColors(summary_accent_colors()));
-    println!(
-        "  ║{:^50}║",
-        format!("Score: {} / {}", score, total_questions)
-    );
-    println!(
-        "  ║{:^50}║",
-        format!("Correct: {}  |  Passed: {}", score, passed)
-    );
-    println!("  ║{:^50}║", format!("Accuracy: {:.0}%", accuracy));
-    println!("  ║{:^50}║", format!("Pace: {:.1} answers/min", pace));
+    let center_row = |text: &str| format!("{:^w$}", text, w = inner);
 
+    rows.push((center_row("GAME OVER"), RowKind::Accent));
+    rows.push((
+        center_row(&format!("Score: {} / {}", score, total_questions)),
+        RowKind::Accent,
+    ));
+    rows.push((
+        center_row(&format!("Correct: {}  |  Passed: {}", score, passed)),
+        RowKind::Accent,
+    ));
+    rows.push((
+        center_row(&format!("Accuracy: {:.0}%", accuracy)),
+        RowKind::Accent,
+    ));
+    rows.push((
+        center_row(&format!("Pace: {:.1} answers/min", pace)),
+        RowKind::Accent,
+    ));
     if all_used {
-        let _ = execute!(stdout(), SetColors(summary_success_colors()));
-        println!("  ║{:^50}║", "You cleared the entire list!");
+        rows.push((center_row("You cleared the entire list!"), RowKind::Success));
     }
 
-    let _ = execute!(stdout(), SetColors(summary_border_colors()));
-    println!("  ╠{}╣", divider);
+    rows.push((String::new(), RowKind::Divider));
 
     if missed_words.is_empty() {
-        let _ = execute!(stdout(), SetColors(summary_accent_colors()));
-        println!("  ║{:^50}║", "No missed words — perfect round!");
+        rows.push((
+            center_row("No missed words — perfect round!"),
+            RowKind::Success,
+        ));
     } else {
-        let _ = execute!(stdout(), SetColors(summary_accent_colors()));
-        println!("  ║{:^50}║", "Missed words:");
-        // Print missed words, wrapping lines to fit inside the box
-        let mut line = String::new();
-        for (i, word) in missed_words.iter().enumerate() {
-            let separator = if i > 0 { ", " } else { "" };
-            if line.len() + separator.len() + word.len() > 46 {
-                println!("  ║  {:<48}║", line);
-                line = word.clone();
-            } else {
-                line.push_str(separator);
-                line.push_str(word);
-            }
-        }
-        if !line.is_empty() {
-            println!("  ║  {:<48}║", line);
+        rows.push((center_row("Missed words:"), RowKind::Accent));
+        let missed_inner = inner.saturating_sub(4);
+        let missed_lines = build_missed_lines(missed_words, missed_inner, 3);
+        for line in missed_lines {
+            rows.push((
+                format!("  {:<w$}  ", line, w = missed_inner),
+                RowKind::Accent,
+            ));
         }
     }
 
-    let _ = execute!(stdout(), SetColors(summary_border_colors()));
-    println!("  ╚{}╝\n", divider);
+    if !actions.is_empty() {
+        rows.push((String::new(), RowKind::Divider));
+        for action in actions {
+            rows.push((format!("  {:<w$}", action, w = inner - 2), RowKind::Accent));
+        }
+    }
+
+    // --- Render ---
+    let box_line: String = "─".repeat(inner + 2);
+    let total_height = rows.len() as u16 + 2; // top + bottom border
+    let start_row = th.saturating_sub(total_height) / 2;
+    let col = center_col(tw, (inner + 4) as u16);
+
+    let _ = queue!(
+        stdout(),
+        SetColors(fg_on_primary()),
+        Clear(terminal::ClearType::All),
+        MoveTo(col, start_row),
+        SetColors(summary_border_colors()),
+    );
+    print!("┌{}┐", box_line);
+
+    for (i, (text, kind)) in rows.iter().enumerate() {
+        let row = start_row + 1 + i as u16;
+        let _ = queue!(stdout(), MoveTo(col, row));
+        match kind {
+            RowKind::Accent => {
+                let _ = queue!(stdout(), SetColors(summary_accent_colors()));
+                print!("│ {} │", text);
+            }
+            RowKind::Success => {
+                let _ = queue!(stdout(), SetColors(summary_success_colors()));
+                print!("│ {} │", text);
+            }
+            RowKind::Divider => {
+                let _ = queue!(stdout(), SetColors(summary_border_colors()));
+                print!("├{}┤", box_line);
+            }
+        }
+    }
+
+    let bottom_row = start_row + 1 + rows.len() as u16;
+    let _ = queue!(
+        stdout(),
+        MoveTo(col, bottom_row),
+        SetColors(summary_border_colors()),
+    );
+    print!("└{}┘", box_line);
+    let _ = queue!(stdout(), SetColors(fg_on_primary()));
+    let _ = stdout().flush();
+}
+
+/// Wrap a list of missed words into lines no wider than `width`, capping the
+/// total line count at `max_lines`. When the list is too long, the final line
+/// becomes `"...and N more"`.
+fn build_missed_lines(missed: &[String], width: usize, max_lines: usize) -> Vec<String> {
+    debug_assert!(max_lines >= 1);
+
+    let mut lines: Vec<String> = Vec::new();
+    let mut line_counts: Vec<usize> = Vec::new();
+    let mut current = String::new();
+    let mut current_count = 0usize;
+
+    for word in missed {
+        let sep_len = if current.is_empty() { 0 } else { 2 };
+        let fits = current.len() + sep_len + word.len() <= width;
+        if !fits && !current.is_empty() {
+            lines.push(std::mem::take(&mut current));
+            line_counts.push(current_count);
+            current_count = 0;
+        }
+        if !current.is_empty() {
+            current.push_str(", ");
+        }
+        current.push_str(word);
+        current_count += 1;
+    }
+    if !current.is_empty() {
+        lines.push(current);
+        line_counts.push(current_count);
+    }
+
+    if lines.len() <= max_lines {
+        return lines;
+    }
+
+    let keep = max_lines.saturating_sub(1);
+    let kept_count: usize = line_counts[..keep].iter().sum();
+    let remaining = missed.len().saturating_sub(kept_count);
+    let mut truncated: Vec<String> = lines.into_iter().take(keep).collect();
+    truncated.push(format!("...and {} more", remaining));
+    truncated
 }
 
 // ─── Holder view (networked: shows timer + score but NOT the word) ───
@@ -810,17 +912,6 @@ pub fn render_role_assigned(role: Role, term_size: (u16, u16)) {
         desc,
         "",
         "Game starting...",
-    ];
-    render_centered_box(&lines, term_size, fg_on_primary());
-}
-
-pub fn render_post_game_menu(term_size: (u16, u16)) {
-    let lines = [
-        "WHAT NEXT?",
-        "",
-        "[P] Play again (same holder)",
-        "[N] Pick next holder",
-        "[Q] Quit session",
     ];
     render_centered_box(&lines, term_size, fg_on_primary());
 }

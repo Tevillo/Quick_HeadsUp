@@ -5,7 +5,7 @@
 Items required before cutting the next release (from triage on 2026-04-21):
 
 - [x] Add color scheme option — starting schemes: grayscale, pastel, beige, blue
-- [ ] Show end-of-game stats in post-game lobby for all players (solo + networked) — score, words guessed/skipped visible to host and joiner inside the TUI; replaces the current post-exit print entirely
+- [x] Show end-of-game stats in post-game lobby for all players (solo + networked) — score, words guessed/skipped visible to host and joiner inside the TUI; replaces the current post-exit print entirely
 - [x] Spawn a terminal when executable is run outside of one (e.g. double-clicked from file manager)
 
 Deferred to a later release: low-time warning, viewer-side screen flash fix, custom word list support (in-app create/import UI), round-based multiplayer, server-side persistent stats, dynamic word difficulty.
@@ -26,7 +26,7 @@ Deferred to a later release: low-time warning, viewer-side screen flash fix, cus
 - [x] Add color scheme option — starting schemes: pastel, beige, blue (shipped with 12 schemes: 3 generic + 9 ASOIAF great houses, truecolor)
 - [x] Return to lobby after game ends instead of exiting — show stats screen in-TUI, then back to menu
 - [x] Replace clap with TUI menu system ([plan](.claude/tui-menu-plan.md))
-- [ ] Show end-of-game stats in post-game lobby for all players (solo + networked) — score, words guessed/skipped visible to host and joiner inside the TUI; replaces the current post-exit print entirely
+- [x] Show end-of-game stats in post-game lobby for all players (solo + networked) — score, words guessed/skipped visible to host and joiner inside the TUI; replaces the current post-exit print entirely
 - [ ] Round-based multiplayer — multiple rounds with automatic role swapping and cumulative scoring
 - [x] Spawn a terminal when executable is run outside of one (e.g. double-clicked from file manager)
 - [x] Self-contained install layout — ship `guess_up` so it runs from its own directory with two sibling dirs adjacent to the binary: a hidden `.history/` dir for game history (replacing `~/.guess_up_history.json`) and a `lists/` dir for word lists (replacing the hardcoded `files/ASOIAF_list.txt` path)

@@ -182,16 +182,31 @@ pub async fn run_solo(app_config: &AppConfig) {
     input_handle.abort();
     timer_handle.abort();
 
-    // Restore terminal before printing summary
-    drop(_guard);
-
-    render::print_output(
+    // Render summary inside the alt screen and wait for any key.
+    let term_size = render::terminal_size();
+    render::render_game_summary(
         summary.score,
         summary.total_questions,
         &summary.missed_words,
         summary.game_time,
         summary.all_used,
+        &["Press any key to return to the main menu"],
+        term_size,
     );
+
+    let mut reader = EventStream::new();
+    while let Some(Ok(event)) = reader.next().await {
+        if let Event::Key(key) = event {
+            if key.kind == KeyEventKind::Press {
+                if input::is_ctrl_c(&key) {
+                    render::force_exit();
+                }
+                break;
+            }
+        }
+    }
+
+    drop(_guard);
 }
 
 pub async fn run_host(app_config: &mut AppConfig, relay_addr: &str) {

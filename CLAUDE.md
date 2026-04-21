@@ -70,7 +70,7 @@ Network Task (TCP via relay)       ---> tx --+  (networked mode only)
 | `game.rs` | `GameState`, game loop (`tokio::select!`), Fisher-Yates shuffle, history saving. `run_game` is the host/solo loop, `run_remote_game` is the joiner's display-only loop |
 | `input.rs` | `input_task()` — crossterm `EventStream`, single-keypress in raw mode |
 | `timer.rs` | `timer_task()` — 1s interval ticks, bonus-time channel for extra-time mode |
-| `render.rs` | `TerminalGuard` (RAII cleanup), `MenuItem` enum, menu rendering, game rendering, flash, countdown, lobby screens, summary output |
+| `render.rs` | `TerminalGuard` (RAII cleanup), `MenuItem` enum, menu rendering, game rendering, flash, countdown, lobby screens, `render_game_summary` (in-TUI end-of-game stats box with caller-supplied action hints) |
 | `net.rs` | `NetConnection` (TCP connect/split/reassemble), `NetHandle` (spawn read/write tasks, recoverable shutdown), `OutboundMsg` (Broadcast/SendTo routing) |
 | `lobby.rs` | Room creation, host lobby (wait for players with live participant list), holder selection (pick any participant), joiner session loop, post-game menu (play again / pick next holder / quit), connection recovery across games |
 | `terminal_spawn.rs` | Detect missing TTY (`IsTerminal` on stdin+stdout) and re-launch the binary inside a terminal emulator. Linux picker: `$TERMINAL` → `xdg-terminal-exec` → built-in fallback list. Windows picker: `wt.exe` → `cmd.exe /c start`. Loop-safe via `GUESS_UP_SPAWNED=1` sentinel. Opt-out with `--no-spawn-terminal`. On total failure, appends a timestamped entry to `<install_dir>/.guess_up_launch_error.log` and exits 1. |
@@ -82,7 +82,7 @@ The key invariant is that `input.rs` stays separate from `game.rs` to allow swap
 - **TerminalGuard**: RAII pattern with `Drop` — ensures raw mode and alternate screen are cleaned up on panic or early exit.
 - **Self-spawn sentinel**: `terminal_spawn::spawn_if_needed` is the first thing `main()` runs. It skips when `--no-spawn-terminal` is passed, when `GUESS_UP_SPAWNED=1` is set (sentinel written on the child's env so we can't fork-bomb), or when either stdin/stdout is already a TTY. Only fires on full detachment (file-manager launch, detached systemd unit, etc.).
 - **Flash race condition**: `flash_screen()` clobbers the display; after 150ms it sends `GameEvent::Redraw` so the game loop re-renders the current word. Both game loops track a `flashing` flag to skip renders while the flash is on screen, preventing the game loop or timer ticks from overwriting the flash effect.
-- **Summary rendering**: `TerminalGuard` must be dropped *before* `print_output()` — otherwise the summary prints inside the alternate screen buffer and gets wiped.
+- **Summary rendering**: `render::render_game_summary` draws the end-of-game stats *inside* the alt screen — solo, host, and joiner all keep their `TerminalGuard` alive. Callers pass a list of action hints (`"[P] Play again"`, `"Press any key to continue..."`, `"Waiting for host..."`) that render below the stats inside the same box. Missed words wrap across up to 3 lines and are truncated with `"...and N more"` when the list is longer.
 - **Connection recovery**: In networked mode, `NetHandle::shutdown()` recovers the TCP reader/writer from background tasks so the connection can be reused across games without reconnecting. Both host and joiner recover connections after each game for multi-round play.
 - **Host-authoritative model**: The host owns all game state (words, timer, score). Joiners run `run_remote_game` which only renders based on messages received from the host. Input routing depends on role — Viewer processes `RemoteInput` from the holder's `PeerId`, Holder processes `UserInput`. The host picks who the Holder is from a participant list (can be themselves or any joiner).
 - **Multi-viewer rooms**: Rooms support 1 host + up to 8 joiners. The relay server manages a `Vec<Peer>` per room, assigns monotonically increasing PeerIds, and routes messages (broadcast or targeted). Only host disconnect removes the room; joiner disconnect is non-fatal.
@@ -106,11 +106,11 @@ Manual play-testing is the primary test strategy. Key scenarios to verify:
 
 1. `cargo run -p guess_up` — main menu renders, arrow/hjkl navigation works
 2. Settings → change game_time → exit → re-run → value persisted in `.guess_up_config.json` next to the binary
-3. Solo → plays full game → returns to main menu
+3. Solo → plays full game → end-of-game stats render inside the alt screen → any key returns to main menu
 4. Category picker → scroll through categories → select one → only those words appear
 5. Host → server connect screen → type address → connect → room created → lobby shows player list → settings accessible while waiting
 6. Join → server connect → enter room code → wrong code shows error inline → correct code joins
-7. Networked: host + joiners, holder selection from participant list, play-again/pick-next-holder flow, peer disconnect handling
+7. Networked: host + joiners, holder selection from participant list, play-again/pick-next-holder flow, peer disconnect handling. Host sees stats + `[P]/[N]/[Q]` hints in one combined box; joiner sees the same stats with a "Waiting for host..." footer until the next `RoleAssignment`.
 8. Room stays alive across games — PlayAgain and PickNextHolder work without reconnecting
 9. Multi-viewer: 1 host + multiple joiners, host picks a joiner as Holder, all viewers see words
 10. Holder rotation: after round, host picks a different Holder via "Pick Next Holder"

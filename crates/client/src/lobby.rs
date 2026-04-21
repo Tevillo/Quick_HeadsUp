@@ -35,7 +35,7 @@ pub async fn run_host_session(relay_addr: &str, app_config: &mut AppConfig) -> i
         }
     };
 
-    let mut guard = Some(render::TerminalGuard::new());
+    let _guard = render::TerminalGuard::new();
 
     // Wait for players (multi-viewer lobby)
     let mut peers = match wait_for_players(&code, &mut conn, app_config).await? {
@@ -59,11 +59,6 @@ pub async fn run_host_session(relay_addr: &str, app_config: &mut AppConfig) -> i
             tokio::time::sleep(std::time::Duration::from_secs(2)).await;
             let _ = conn.send_client_msg(&ClientMessage::Disconnect).await;
             return Ok(());
-        }
-
-        // Ensure we're in alternate screen
-        if guard.is_none() {
-            guard = Some(render::TerminalGuard::new());
         }
 
         let term_size = render::terminal_size();
@@ -176,21 +171,18 @@ pub async fn run_host_session(relay_addr: &str, app_config: &mut AppConfig) -> i
         conn = match recovered_conn {
             Some(c) => c,
             None => {
-                // Connection lost — show summary and exit
-                guard.take(); // drop guard to leave alternate screen
-                print_summary(&summary);
+                // Connection lost — show summary inside the alt screen and
+                // wait for any key before returning to the main menu.
+                show_summary_until_keypress(
+                    &summary,
+                    &["Connection to relay lost", "Press any key to continue..."],
+                )
+                .await;
                 return Ok(());
             }
         };
 
-        // Show summary (temporarily leave alternate screen)
-        guard.take();
-        print_summary(&summary);
-
-        // Re-enter alternate screen for post-game menu
-        guard = Some(render::TerminalGuard::new());
-
-        let post_action = run_post_game_menu(&mut conn, &mut peers).await?;
+        let post_action = run_post_game_menu(&mut conn, &mut peers, &summary).await?;
         match post_action {
             PostGameAction::PlayAgain => {}
             PostGameAction::PickNextHolder => {
@@ -409,28 +401,33 @@ pub async fn run_joiner_session(
     room_code: &str,
     my_id: PeerId,
 ) -> io::Result<()> {
-    let mut guard = Some(render::TerminalGuard::new());
+    let _guard = render::TerminalGuard::new();
     let term_size = render::terminal_size();
     render::render_joined_room(room_code, term_size);
-    let mut waiting_for_next_round = false;
+    let mut last_summary: Option<game::GameSummary> = None;
 
     loop {
-        // Ensure we're in alternate screen
-        if guard.is_none() {
-            guard = Some(render::TerminalGuard::new());
-        }
-
         // Wait for role assignment from host. Between rounds the joiner
         // can press Q to quit. We also accept (and ignore) PlayAgain /
         // PickNextHolder messages — only RoleAssignment starts the next round.
         let my_role = {
-            let msg = if waiting_for_next_round {
-                "Waiting for host..."
-            } else {
-                "Waiting for host to assign roles..."
-            };
             let term_size = render::terminal_size();
-            render::render_message(msg, term_size);
+            if let Some(summary) = &last_summary {
+                render::render_game_summary(
+                    summary.score,
+                    summary.total_questions,
+                    &summary.missed_words,
+                    summary.game_time,
+                    summary.all_used,
+                    &[
+                        "Waiting for host to start the next round...",
+                        "[Q] Quit session",
+                    ],
+                    term_size,
+                );
+            } else {
+                render::render_message("Waiting for host to assign roles...", term_size);
+            }
 
             let mut reader = EventStream::new();
             loop {
@@ -538,18 +535,18 @@ pub async fn run_joiner_session(
         conn = match recovered_conn {
             Some(c) => c,
             None => {
-                guard.take();
-                print_summary(&summary);
+                show_summary_until_keypress(
+                    &summary,
+                    &["Connection to host lost", "Press any key to continue..."],
+                )
+                .await;
                 return Ok(());
             }
         };
 
-        // Show summary (temporarily leave alternate screen)
-        guard.take();
-        print_summary(&summary);
-
-        // Next iteration will re-enter alt screen and wait for RoleAssignment
-        waiting_for_next_round = true;
+        // Stay in the alt screen; the next iteration renders the summary as
+        // the backdrop while we wait for the host to kick off the next round.
+        last_summary = Some(summary);
     }
 }
 
@@ -643,9 +640,22 @@ enum PostGameAction {
 async fn run_post_game_menu(
     conn: &mut NetConnection,
     peers: &mut Vec<PeerId>,
+    summary: &game::GameSummary,
 ) -> io::Result<PostGameAction> {
     let term_size = render::terminal_size();
-    render::render_post_game_menu(term_size);
+    render::render_game_summary(
+        summary.score,
+        summary.total_questions,
+        &summary.missed_words,
+        summary.game_time,
+        summary.all_used,
+        &[
+            "[P] Play again (same holder)",
+            "[N] Pick next holder",
+            "[Q] Quit session",
+        ],
+        term_size,
+    );
 
     let mut reader = EventStream::new();
     loop {
@@ -707,12 +717,31 @@ async fn run_post_game_menu(
 
 // ─── Helpers ─────────────────────────────────────────────────────────
 
-fn print_summary(summary: &game::GameSummary) {
-    render::print_output(
+/// Render the end-of-game summary with the supplied action hints, then block
+/// until the user presses any key. Used when there's no interactive post-game
+/// menu to run (solo fallback paths like a lost relay connection).
+async fn show_summary_until_keypress(summary: &game::GameSummary, actions: &[&str]) {
+    let term_size = render::terminal_size();
+    render::render_game_summary(
         summary.score,
         summary.total_questions,
         &summary.missed_words,
         summary.game_time,
         summary.all_used,
+        actions,
+        term_size,
     );
+
+    let mut reader = EventStream::new();
+    while let Some(Ok(event)) = reader.next().await {
+        if let Event::Key(key) = event {
+            if key.kind != KeyEventKind::Press {
+                continue;
+            }
+            if crate::input::is_ctrl_c(&key) {
+                crate::render::force_exit();
+            }
+            break;
+        }
+    }
 }
