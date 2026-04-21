@@ -4,6 +4,7 @@ mod input;
 mod lobby;
 mod menu;
 mod net;
+mod paths;
 mod render;
 mod timer;
 mod types;
@@ -14,11 +15,15 @@ use futures::StreamExt;
 use net::NetConnection;
 use std::collections::HashSet;
 use std::fs;
-use std::path::Path;
 use types::*;
 
-pub fn load_words(path: &str, category: Option<&str>) -> Vec<String> {
-    let content = fs::read_to_string(Path::new(path)).expect("Could not read word file");
+pub fn load_words(filename: &str, category: Option<&str>) -> Vec<String> {
+    let Ok(path) = paths::word_file_path(filename) else {
+        return Vec::new();
+    };
+    let Ok(content) = fs::read_to_string(&path) else {
+        return Vec::new();
+    };
 
     let mut words = Vec::new();
     let mut current_category: Option<String> = None;
@@ -51,8 +56,11 @@ pub fn load_words(path: &str, category: Option<&str>) -> Vec<String> {
     words
 }
 
-pub fn load_categories(path: &str) -> Vec<String> {
-    let Ok(content) = fs::read_to_string(Path::new(path)) else {
+pub fn load_categories(filename: &str) -> Vec<String> {
+    let Ok(path) = paths::word_file_path(filename) else {
+        return Vec::new();
+    };
+    let Ok(content) = fs::read_to_string(&path) else {
         return Vec::new();
     };
     let mut categories = Vec::new();
@@ -68,6 +76,39 @@ pub fn load_categories(path: &str) -> Vec<String> {
 #[tokio::main]
 async fn main() {
     let mut config = AppConfig::load();
+
+    match paths::list_available_lists() {
+        Err(_) => {
+            let path_display = paths::lists_dir()
+                .map(|p| p.display().to_string())
+                .unwrap_or_else(|_| "<install_dir>/lists".to_string());
+            show_error(&format!(
+                "No `lists/` directory found at {}. Create it and add at least one `.txt` word list.",
+                path_display
+            ))
+            .await;
+            return;
+        }
+        Ok(names) if names.is_empty() => {
+            let path_display = paths::lists_dir()
+                .map(|p| p.display().to_string())
+                .unwrap_or_else(|_| "<install_dir>/lists".to_string());
+            show_error(&format!(
+                "No word lists found in {}. Add at least one `.txt` file.",
+                path_display
+            ))
+            .await;
+            return;
+        }
+        Ok(names) => {
+            if !names.iter().any(|n| n == &config.word_file) {
+                config.word_file = names[0].clone();
+                config.category = None;
+                config.save();
+            }
+        }
+    }
+
     menu::menu_loop(&mut config).await;
     config.save();
 }

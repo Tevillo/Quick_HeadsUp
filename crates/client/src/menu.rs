@@ -102,8 +102,28 @@ pub async fn menu_loop(config: &mut AppConfig) {
                         // Keep selected on the same item
                         continue;
                     }
+                    SettingsResult::OpenWordListPicker => {
+                        open_word_list_picker(config, &mut reader).await;
+                        screen = Screen::Settings;
+                        continue;
+                    }
                 }
             }
+        }
+    }
+}
+
+async fn open_word_list_picker(config: &mut AppConfig, reader: &mut EventStream) {
+    let Ok(lists) = crate::paths::list_available_lists() else {
+        return;
+    };
+    if lists.is_empty() {
+        return;
+    }
+    if let Some(chosen) = run_word_list_picker(&lists, config, reader).await {
+        if chosen != config.word_file {
+            config.word_file = chosen;
+            config.category = None;
         }
     }
 }
@@ -189,6 +209,7 @@ enum SettingsResult {
     Continue,
     Back,
     OpenCategoryPicker,
+    OpenWordListPicker,
 }
 
 // Settings items indexed as selectable items:
@@ -197,7 +218,7 @@ enum SettingsResult {
 // 2: Last Unlimited
 // 3: Extra Time
 // 4: Bonus Seconds
-// 5: Word File
+// 5: Word List
 // 6: Category
 // 7: Back
 const SETTINGS_COUNT: usize = 8;
@@ -220,7 +241,7 @@ fn render_settings_menu(config: &AppConfig, selected: usize, term_size: (u16, u1
         "[ ]".to_string()
     };
     let bonus_val = format!("< {} >", config.bonus_seconds);
-    let word_file_val = config.word_file.clone();
+    let word_list_val = config.word_file.clone();
     let cat_val = config.category.as_deref().unwrap_or("All").to_string();
 
     let items = [
@@ -245,8 +266,8 @@ fn render_settings_menu(config: &AppConfig, selected: usize, term_size: (u16, u1
             value: &bonus_val,
         },
         MenuItem::Setting {
-            label: "Word File:",
-            value: &word_file_val,
+            label: "Word List:",
+            value: &word_list_val,
         },
         MenuItem::Setting {
             label: "Category:",
@@ -313,15 +334,7 @@ async fn run_settings_screen(
                         config.bonus_seconds = val.clamp(1, 30);
                     }
                 }
-                5 => {
-                    // Text input for word file path
-                    if let Some(val) = run_text_input("Word File:", &config.word_file, reader).await
-                    {
-                        if !val.is_empty() {
-                            config.word_file = val;
-                        }
-                    }
-                }
+                5 => return SettingsResult::OpenWordListPicker,
                 6 => return SettingsResult::OpenCategoryPicker,
                 7 => return SettingsResult::Back,
                 _ => {}
@@ -390,6 +403,54 @@ async fn run_category_picker(
                 KeyCode::Esc | KeyCode::Char('q') => {
                     return None; // Cancel, keep current
                 }
+                _ => {}
+            }
+        }
+    }
+}
+
+// ─── Word list picker ───────────────────────────────────────────────
+
+async fn run_word_list_picker(
+    lists: &[String],
+    config: &AppConfig,
+    reader: &mut EventStream,
+) -> Option<String> {
+    let items: Vec<String> = lists.to_vec();
+
+    let mut selected: usize = items
+        .iter()
+        .position(|n| n == &config.word_file)
+        .unwrap_or(0);
+    let mut scroll_offset: usize = 0;
+    let visible = 15usize.min(items.len());
+
+    loop {
+        if selected < scroll_offset {
+            scroll_offset = selected;
+        } else if selected >= scroll_offset + visible {
+            scroll_offset = selected - visible + 1;
+        }
+
+        let term_size = render::terminal_size();
+        render::render_word_list_picker(&items, selected, scroll_offset, term_size);
+
+        if let Some(Ok(Event::Key(key))) = reader.next().await {
+            if key.kind != KeyEventKind::Press {
+                continue;
+            }
+            if crate::input::is_ctrl_c(&key) {
+                crate::render::force_exit();
+            }
+            match key.code {
+                KeyCode::Up | KeyCode::Char('k') => {
+                    selected = selected.checked_sub(1).unwrap_or(items.len() - 1);
+                }
+                KeyCode::Down | KeyCode::Char('j') => {
+                    selected = (selected + 1) % items.len();
+                }
+                KeyCode::Enter => return Some(items[selected].clone()),
+                KeyCode::Esc | KeyCode::Char('q') => return None,
                 _ => {}
             }
         }
@@ -575,6 +636,9 @@ pub async fn run_settings_inline(config: &mut AppConfig, reader: &mut EventStrea
                 if let Some(cat) = pick {
                     config.category = cat;
                 }
+            }
+            SettingsResult::OpenWordListPicker => {
+                open_word_list_picker(config, reader).await;
             }
         }
     }
