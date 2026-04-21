@@ -8,7 +8,9 @@ use crate::timer;
 use crate::types::*;
 use crossterm::event::{Event, EventStream, KeyCode, KeyEventKind};
 use futures::StreamExt;
-use protocol::{ClientMessage, GameMessage, NetGameConfig, RelayMessage, Role};
+use protocol::{
+    ClientMessage, GameMessage, NetGameConfig, PeerId, RelayMessage, Role, HOST_PEER_ID,
+};
 use std::io::{self, ErrorKind};
 
 // ─── Host session ────────────────────────────────────────────────────
@@ -35,15 +37,17 @@ pub async fn run_host_session(relay_addr: &str, app_config: &mut AppConfig) -> i
 
     let mut guard = Some(render::TerminalGuard::new());
 
-    // Wait for peer (with settings access)
-    let wait_result = wait_for_peer(&code, &mut conn, app_config).await?;
-    if !wait_result {
-        let _ = conn.send_client_msg(&ClientMessage::Disconnect).await;
-        return Ok(());
-    }
+    // Wait for players (multi-viewer lobby)
+    let mut peers = match wait_for_players(&code, &mut conn, app_config).await? {
+        Some(peers) => peers,
+        None => {
+            let _ = conn.send_client_msg(&ClientMessage::Disconnect).await;
+            return Ok(());
+        }
+    };
 
-    // Role selection
-    let mut host_role = select_role(app_config).await;
+    // Holder selection
+    let mut holder_id = select_holder(&peers, app_config).await;
 
     loop {
         // Rebuild config and words from current settings each round
@@ -64,23 +68,64 @@ pub async fn run_host_session(relay_addr: &str, app_config: &mut AppConfig) -> i
 
         let term_size = render::terminal_size();
 
-        // Send role assignment to joiner
-        conn.send_client_msg(&ClientMessage::GameData(GameMessage::RoleAssignment {
-            host_role,
-        }))
+        // Send role assignment to all joiners (broadcast)
+        conn.send_client_msg(&ClientMessage::GameData {
+            msg: GameMessage::RoleAssignment { holder_id },
+            target: None,
+        })
         .await?;
 
-        // Wait for role accepted
+        // Wait for role accepted from all joiners
+        let mut accepted = std::collections::HashSet::new();
         loop {
+            if accepted.len() >= peers.len() {
+                break;
+            }
             match conn.recv_relay_msg().await? {
-                Some(RelayMessage::GameData(GameMessage::RoleAccepted)) => break,
+                Some(RelayMessage::GameData {
+                    msg: GameMessage::RoleAccepted,
+                    from,
+                }) => {
+                    accepted.insert(from);
+                }
                 Some(RelayMessage::Ping) => {
                     conn.send_client_msg(&ClientMessage::Pong).await?;
                 }
-                Some(RelayMessage::PeerDisconnected) | None => {
-                    render::render_message("Opponent disconnected", term_size);
-                    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-                    return Ok(());
+                Some(RelayMessage::PeerDisconnected { peer_id }) => {
+                    peers.retain(|&p| p != peer_id);
+                    accepted.remove(&peer_id);
+                    if peers.is_empty() {
+                        render::render_message("All players disconnected", term_size);
+                        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                        return Ok(());
+                    }
+                    // If the holder disconnected, pick the host as holder
+                    if peer_id == holder_id {
+                        holder_id = HOST_PEER_ID;
+                        // Re-send role assignment
+                        conn.send_client_msg(&ClientMessage::GameData {
+                            msg: GameMessage::RoleAssignment { holder_id },
+                            target: None,
+                        })
+                        .await?;
+                        accepted.clear();
+                    }
+                }
+                Some(RelayMessage::PeerJoined { peer_id }) => {
+                    // Late joiner during role assignment — add them but
+                    // they'll need a role assignment too
+                    peers.push(peer_id);
+                    conn.send_client_msg(&ClientMessage::GameData {
+                        msg: GameMessage::RoleAssignment { holder_id },
+                        target: Some(peer_id),
+                    })
+                    .await?;
+                }
+                None => {
+                    return Err(io::Error::new(
+                        ErrorKind::ConnectionAborted,
+                        "Relay disconnected",
+                    ));
                 }
                 _ => {}
             }
@@ -97,8 +142,18 @@ pub async fn run_host_session(relay_addr: &str, app_config: &mut AppConfig) -> i
             },
             word_count: words.len(),
         };
-        conn.send_client_msg(&ClientMessage::GameData(GameMessage::GameStart(net_config)))
-            .await?;
+        conn.send_client_msg(&ClientMessage::GameData {
+            msg: GameMessage::GameStart(net_config),
+            target: None,
+        })
+        .await?;
+
+        // Determine host's local role
+        let host_role = if holder_id == HOST_PEER_ID {
+            Role::Holder
+        } else {
+            Role::Viewer
+        };
 
         render::render_role_assigned(host_role, term_size);
         tokio::time::sleep(std::time::Duration::from_secs(2)).await;
@@ -107,8 +162,16 @@ pub async fn run_host_session(relay_addr: &str, app_config: &mut AppConfig) -> i
             render::render_countdown(term_size);
         }
 
+        // holder_peer_id is Some(id) if a joiner is the holder, None if host is holder
+        let holder_peer = if holder_id == HOST_PEER_ID {
+            None
+        } else {
+            Some(holder_id)
+        };
+
         // --- Run the game ---
-        let (summary, recovered_conn) = run_host_game(&config, words, conn, host_role).await;
+        let (summary, recovered_conn) =
+            run_host_game(&config, words, conn, host_role, holder_peer).await;
 
         conn = match recovered_conn {
             Some(c) => c,
@@ -127,14 +190,11 @@ pub async fn run_host_session(relay_addr: &str, app_config: &mut AppConfig) -> i
         // Re-enter alternate screen for post-game menu
         guard = Some(render::TerminalGuard::new());
 
-        let post_action = run_post_game_menu(&mut conn).await?;
+        let post_action = run_post_game_menu(&mut conn, &mut peers).await?;
         match post_action {
             PostGameAction::PlayAgain => {}
-            PostGameAction::SwapRoles => {
-                host_role = match host_role {
-                    Role::Viewer => Role::Holder,
-                    Role::Holder => Role::Viewer,
-                };
+            PostGameAction::PickNextHolder => {
+                holder_id = select_holder(&peers, app_config).await;
             }
             PostGameAction::Quit => {
                 let _ = conn.send_client_msg(&ClientMessage::Disconnect).await;
@@ -144,30 +204,48 @@ pub async fn run_host_session(relay_addr: &str, app_config: &mut AppConfig) -> i
     }
 }
 
-// ─── Wait for peer (with settings menu) ─────────────────────────────
+// ─── Wait for players (multi-viewer lobby) ──────────────────────────
 
-/// Wait for a peer to join the room. Returns `true` if a peer joined,
-/// `false` if the host chose to disconnect.
-async fn wait_for_peer(
+/// Wait for players to join the room. Returns `Some(Vec<PeerId>)` when
+/// the host starts the game, or `None` if the host disconnects.
+async fn wait_for_players(
     room_code: &str,
     conn: &mut NetConnection,
     app_config: &mut AppConfig,
-) -> io::Result<bool> {
+) -> io::Result<Option<Vec<PeerId>>> {
     let mut reader = EventStream::new();
     let mut selected: usize = 0;
-    let count = 2; // Settings, Disconnect
+    let mut peers: Vec<PeerId> = Vec::new();
 
     loop {
+        let has_players = !peers.is_empty();
+        let count = if has_players { 3 } else { 2 }; // Start (if players), Settings, Disconnect
+
         let term_size = render::terminal_size();
         let code_line = format!("Room: {}", room_code);
-        let items = [
-            MenuItem::Label("WAITING FOR OPPONENT..."),
-            MenuItem::Label(""),
+        let player_count = format!("Players: {}/9", peers.len() + 1);
+
+        let mut items: Vec<MenuItem> = vec![
             MenuItem::Label(&code_line),
             MenuItem::Label(""),
-            MenuItem::Action("Settings"),
-            MenuItem::Action("Disconnect"),
+            MenuItem::Label(&player_count),
+            MenuItem::Label("  Host (you)"),
         ];
+        // Build player labels for each peer
+        let peer_labels: Vec<String> = peers
+            .iter()
+            .map(|pid| format!("  Player {}", pid))
+            .collect();
+        for label in &peer_labels {
+            items.push(MenuItem::Label(label));
+        }
+        items.push(MenuItem::Label(""));
+        if has_players {
+            items.push(MenuItem::Action("Start Game"));
+        }
+        items.push(MenuItem::Action("Settings"));
+        items.push(MenuItem::Action("Disconnect"));
+
         render::render_menu("HOST LOBBY", &items, selected, term_size);
 
         tokio::select! {
@@ -187,18 +265,43 @@ async fn wait_for_peer(
                     KeyCode::Down | KeyCode::Char('j') => {
                         selected = (selected + 1) % count;
                     }
-                    KeyCode::Enter => match selected {
-                        0 => menu::run_settings_inline(app_config, &mut reader).await,
-                        1 => return Ok(false),
-                        _ => {}
-                    },
-                    KeyCode::Esc | KeyCode::Char('q') => return Ok(false),
+                    KeyCode::Enter => {
+                        if has_players {
+                            match selected {
+                                0 => return Ok(Some(peers)),      // Start Game
+                                1 => menu::run_settings_inline(app_config, &mut reader).await,
+                                2 => return Ok(None),             // Disconnect
+                                _ => {}
+                            }
+                        } else {
+                            match selected {
+                                0 => menu::run_settings_inline(app_config, &mut reader).await,
+                                1 => return Ok(None),             // Disconnect
+                                _ => {}
+                            }
+                        }
+                    }
+                    KeyCode::Esc | KeyCode::Char('q') => return Ok(None),
                     _ => {}
                 }
             }
             msg = conn.recv_relay_msg() => {
                 match msg? {
-                    Some(RelayMessage::PeerJoined) => return Ok(true),
+                    Some(RelayMessage::PeerJoined { peer_id }) => {
+                        peers.push(peer_id);
+                        // Reset selection to clamp it
+                        let new_count = if !peers.is_empty() { 3 } else { 2 };
+                        if selected >= new_count {
+                            selected = new_count - 1;
+                        }
+                    }
+                    Some(RelayMessage::PeerDisconnected { peer_id }) => {
+                        peers.retain(|&p| p != peer_id);
+                        let new_count = if !peers.is_empty() { 3 } else { 2 };
+                        if selected >= new_count {
+                            selected = new_count - 1;
+                        }
+                    }
                     Some(RelayMessage::Ping) => {
                         conn.send_client_msg(&ClientMessage::Pong).await?;
                     }
@@ -222,6 +325,7 @@ async fn run_host_game(
     words: Vec<String>,
     conn: NetConnection,
     local_role: Role,
+    holder_peer_id: Option<PeerId>,
 ) -> (game::GameSummary, Option<NetConnection>) {
     let (event_tx, event_rx) = tokio::sync::mpsc::channel::<GameEvent>(32);
     let (bonus_tx, bonus_rx) = tokio::sync::mpsc::channel::<u64>(16);
@@ -252,6 +356,7 @@ async fn run_host_game(
         flash_tx,
         Some(net_tx),
         Some(local_role),
+        holder_peer_id,
     )
     .await;
 
@@ -267,8 +372,8 @@ async fn run_host_game(
 // ─── Joiner session ─────────────────────────────────────────────────
 
 /// Connect to the relay and join a room. Returns the established connection
-/// on success, or an error (e.g. bad room code, connection refused).
-pub async fn try_join_room(relay_addr: &str, code: &str) -> io::Result<NetConnection> {
+/// and the joiner's peer ID on success.
+pub async fn try_join_room(relay_addr: &str, code: &str) -> io::Result<(NetConnection, PeerId)> {
     let mut conn = NetConnection::connect(relay_addr).await.map_err(|e| {
         io::Error::new(
             ErrorKind::ConnectionRefused,
@@ -282,16 +387,28 @@ pub async fn try_join_room(relay_addr: &str, code: &str) -> io::Result<NetConnec
     })
     .await?;
 
-    match conn.recv_relay_msg().await? {
-        Some(RelayMessage::JoinedRoom) => Ok(conn),
-        Some(RelayMessage::Error(e)) => Err(io::Error::other(format!("{}", e))),
-        _ => Err(io::Error::other("Unexpected relay response")),
+    let peer_id = match conn.recv_relay_msg().await? {
+        Some(RelayMessage::JoinedRoom { peer_id }) => peer_id,
+        Some(RelayMessage::Error(e)) => return Err(io::Error::other(format!("{}", e))),
+        _ => return Err(io::Error::other("Unexpected relay response")),
+    };
+
+    // Read and discard the PeerList — the joiner doesn't need it
+    // since the host manages the participant list
+    if let Some(RelayMessage::PeerList { .. }) = conn.recv_relay_msg().await? {
+        // Expected — consumed and discarded
     }
+
+    Ok((conn, peer_id))
 }
 
 /// Run the joiner game session on an already-joined connection.
 /// Loops across games until the host quits or disconnects.
-pub async fn run_joiner_session(mut conn: NetConnection, room_code: &str) -> io::Result<()> {
+pub async fn run_joiner_session(
+    mut conn: NetConnection,
+    room_code: &str,
+    my_id: PeerId,
+) -> io::Result<()> {
     let mut guard = Some(render::TerminalGuard::new());
     let term_size = render::terminal_size();
     render::render_joined_room(room_code, term_size);
@@ -305,12 +422,12 @@ pub async fn run_joiner_session(mut conn: NetConnection, room_code: &str) -> io:
 
         // Wait for role assignment from host. Between rounds the joiner
         // can press Q to quit. We also accept (and ignore) PlayAgain /
-        // SwapRoles messages — only RoleAssignment starts the next round.
+        // PickNextHolder messages — only RoleAssignment starts the next round.
         let my_role = {
             let msg = if waiting_for_next_round {
                 "Waiting for host..."
             } else {
-                "Waiting for host to choose roles..."
+                "Waiting for host to assign roles..."
             };
             let term_size = render::terminal_size();
             render::render_message(msg, term_size);
@@ -327,9 +444,10 @@ pub async fn run_joiner_session(mut conn: NetConnection, room_code: &str) -> io:
                                 && matches!(key.code, KeyCode::Char('q') | KeyCode::Char('Q') | KeyCode::Esc)
                             {
                                 let _ = conn
-                                    .send_client_msg(&ClientMessage::GameData(
-                                        GameMessage::QuitSession,
-                                    ))
+                                    .send_client_msg(&ClientMessage::GameData {
+                                        msg: GameMessage::QuitSession,
+                                        target: None,
+                                    })
                                     .await;
                                 return Ok(());
                             }
@@ -337,16 +455,19 @@ pub async fn run_joiner_session(mut conn: NetConnection, room_code: &str) -> io:
                     }
                     msg = conn.recv_relay_msg() => {
                         match msg? {
-                            Some(RelayMessage::GameData(GameMessage::RoleAssignment {
-                                host_role,
-                            })) => {
-                                let role = match host_role {
-                                    Role::Viewer => Role::Holder,
-                                    Role::Holder => Role::Viewer,
+                            Some(RelayMessage::GameData {
+                                msg: GameMessage::RoleAssignment { holder_id },
+                                ..
+                            }) => {
+                                let role = if holder_id == my_id {
+                                    Role::Holder
+                                } else {
+                                    Role::Viewer
                                 };
-                                conn.send_client_msg(&ClientMessage::GameData(
-                                    GameMessage::RoleAccepted,
-                                ))
+                                conn.send_client_msg(&ClientMessage::GameData {
+                                    msg: GameMessage::RoleAccepted,
+                                    target: None,
+                                })
                                 .await?;
                                 let term_size = render::terminal_size();
                                 render::render_role_assigned(role, term_size);
@@ -355,16 +476,27 @@ pub async fn run_joiner_session(mut conn: NetConnection, room_code: &str) -> io:
                             Some(RelayMessage::Ping) => {
                                 conn.send_client_msg(&ClientMessage::Pong).await?;
                             }
-                            Some(RelayMessage::PeerDisconnected) | None => {
+                            Some(RelayMessage::PeerDisconnected { peer_id })
+                                if peer_id == HOST_PEER_ID =>
+                            {
                                 let term_size = render::terminal_size();
                                 render::render_message("Host disconnected", term_size);
                                 tokio::time::sleep(std::time::Duration::from_secs(2)).await;
                                 return Ok(());
                             }
-                            Some(RelayMessage::GameData(GameMessage::QuitSession)) => {
+                            None => {
+                                let term_size = render::terminal_size();
+                                render::render_message("Host disconnected", term_size);
+                                tokio::time::sleep(std::time::Duration::from_secs(2)).await;
                                 return Ok(());
                             }
-                            // Ignore PlayAgain/SwapRoles — we only care about RoleAssignment
+                            Some(RelayMessage::GameData {
+                                msg: GameMessage::QuitSession,
+                                ..
+                            }) => {
+                                return Ok(());
+                            }
+                            // Ignore PlayAgain/PickNextHolder/PeerJoined/PeerDisconnected (non-host)
                             _ => {}
                         }
                     }
@@ -375,11 +507,20 @@ pub async fn run_joiner_session(mut conn: NetConnection, room_code: &str) -> io:
         // Wait for game start
         loop {
             match conn.recv_relay_msg().await? {
-                Some(RelayMessage::GameData(GameMessage::GameStart(_cfg))) => break,
+                Some(RelayMessage::GameData {
+                    msg: GameMessage::GameStart(_cfg),
+                    ..
+                }) => break,
                 Some(RelayMessage::Ping) => {
                     conn.send_client_msg(&ClientMessage::Pong).await?;
                 }
-                Some(RelayMessage::PeerDisconnected) | None => {
+                Some(RelayMessage::PeerDisconnected { peer_id }) if peer_id == HOST_PEER_ID => {
+                    let term_size = render::terminal_size();
+                    render::render_message("Host disconnected", term_size);
+                    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                    return Ok(());
+                }
+                None => {
                     let term_size = render::terminal_size();
                     render::render_message("Host disconnected", term_size);
                     tokio::time::sleep(std::time::Duration::from_secs(2)).await;
@@ -433,22 +574,29 @@ async fn run_joiner_game(
     (summary, recovered)
 }
 
-// ─── Role selection (host only) ──────────────────────────────────────
+// ─── Holder selection (host only) ───────────────────────────────────
 
-async fn select_role(app_config: &mut AppConfig) -> Role {
+async fn select_holder(peers: &[PeerId], app_config: &mut AppConfig) -> PeerId {
     let mut selected: usize = 0;
     let mut reader = EventStream::new();
-    let count = 3; // Viewer, Holder, Settings
+
+    // Build participant list: Host + all peers
+    let participant_count = 1 + peers.len(); // Host + peers
+    let total_selectable = participant_count + 1; // participants + Settings
 
     loop {
         let term_size = render::terminal_size();
-        let items = [
-            MenuItem::Action("Viewer — See words, give clues"),
-            MenuItem::Action("Holder — Guess and press Y/N"),
-            MenuItem::Label(""),
-            MenuItem::Action("Settings"),
-        ];
-        render::render_menu("CHOOSE YOUR ROLE", &items, selected, term_size);
+
+        let mut items: Vec<MenuItem> = Vec::new();
+        items.push(MenuItem::Action("Host (you)"));
+        let peer_labels: Vec<String> = peers.iter().map(|pid| format!("Player {}", pid)).collect();
+        for label in &peer_labels {
+            items.push(MenuItem::Action(label));
+        }
+        items.push(MenuItem::Label(""));
+        items.push(MenuItem::Action("Settings"));
+
+        render::render_menu("CHOOSE THE HOLDER", &items, selected, term_size);
 
         let Some(Ok(event)) = reader.next().await else {
             continue;
@@ -464,19 +612,21 @@ async fn select_role(app_config: &mut AppConfig) -> Role {
         }
         match key.code {
             KeyCode::Up | KeyCode::Char('k') => {
-                selected = selected.checked_sub(1).unwrap_or(count - 1);
+                selected = selected.checked_sub(1).unwrap_or(total_selectable - 1);
             }
             KeyCode::Down | KeyCode::Char('j') => {
-                selected = (selected + 1) % count;
+                selected = (selected + 1) % total_selectable;
             }
-            KeyCode::Enter => match selected {
-                0 => return Role::Viewer,
-                1 => return Role::Holder,
-                2 => menu::run_settings_inline(app_config, &mut reader).await,
-                _ => {}
-            },
-            KeyCode::Char('v') | KeyCode::Char('V') => return Role::Viewer,
-            KeyCode::Char('h') | KeyCode::Char('H') => return Role::Holder,
+            KeyCode::Enter => {
+                if selected == 0 {
+                    return HOST_PEER_ID; // Host is holder
+                } else if selected <= peers.len() {
+                    return peers[selected - 1]; // A joiner is holder
+                } else {
+                    // Settings
+                    menu::run_settings_inline(app_config, &mut reader).await;
+                }
+            }
             _ => {}
         }
     }
@@ -486,11 +636,14 @@ async fn select_role(app_config: &mut AppConfig) -> Role {
 
 enum PostGameAction {
     PlayAgain,
-    SwapRoles,
+    PickNextHolder,
     Quit,
 }
 
-async fn run_post_game_menu(conn: &mut NetConnection) -> io::Result<PostGameAction> {
+async fn run_post_game_menu(
+    conn: &mut NetConnection,
+    peers: &mut Vec<PeerId>,
+) -> io::Result<PostGameAction> {
     let term_size = render::terminal_size();
     render::render_post_game_menu(term_size);
 
@@ -507,15 +660,24 @@ async fn run_post_game_menu(conn: &mut NetConnection) -> io::Result<PostGameActi
                     }
                     match key.code {
                         KeyCode::Char('p') | KeyCode::Char('P') => {
-                            conn.send_client_msg(&ClientMessage::GameData(GameMessage::PlayAgain)).await?;
+                            conn.send_client_msg(&ClientMessage::GameData {
+                                msg: GameMessage::PlayAgain,
+                                target: None,
+                            }).await?;
                             return Ok(PostGameAction::PlayAgain);
                         }
-                        KeyCode::Char('s') | KeyCode::Char('S') => {
-                            conn.send_client_msg(&ClientMessage::GameData(GameMessage::SwapRoles)).await?;
-                            return Ok(PostGameAction::SwapRoles);
+                        KeyCode::Char('n') | KeyCode::Char('N') => {
+                            conn.send_client_msg(&ClientMessage::GameData {
+                                msg: GameMessage::PickNextHolder,
+                                target: None,
+                            }).await?;
+                            return Ok(PostGameAction::PickNextHolder);
                         }
                         KeyCode::Char('q') | KeyCode::Char('Q') | KeyCode::Esc => {
-                            conn.send_client_msg(&ClientMessage::GameData(GameMessage::QuitSession)).await?;
+                            conn.send_client_msg(&ClientMessage::GameData {
+                                msg: GameMessage::QuitSession,
+                                target: None,
+                            }).await?;
                             return Ok(PostGameAction::Quit);
                         }
                         _ => {}
@@ -524,15 +686,14 @@ async fn run_post_game_menu(conn: &mut NetConnection) -> io::Result<PostGameActi
             }
             msg = conn.recv_relay_msg() => {
                 match msg? {
-                    Some(RelayMessage::GameData(GameMessage::QuitSession)) |
-                    Some(RelayMessage::PeerDisconnected) | None => {
+                    Some(RelayMessage::GameData { msg: GameMessage::QuitSession, .. }) => {
                         return Ok(PostGameAction::Quit);
                     }
-                    Some(RelayMessage::GameData(GameMessage::PlayAgain)) => {
-                        return Ok(PostGameAction::PlayAgain);
-                    }
-                    Some(RelayMessage::GameData(GameMessage::SwapRoles)) => {
-                        return Ok(PostGameAction::SwapRoles);
+                    Some(RelayMessage::PeerDisconnected { peer_id }) => {
+                        peers.retain(|&p| p != peer_id);
+                        if peers.is_empty() {
+                            return Ok(PostGameAction::Quit);
+                        }
                     }
                     Some(RelayMessage::Ping) => {
                         conn.send_client_msg(&ClientMessage::Pong).await?;

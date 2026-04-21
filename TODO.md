@@ -22,10 +22,10 @@
 
 ## Hard
 
-- [ ] Multi-viewer support — one host, up to 8 viewers in the same room
+- [x] Multi-viewer support — one host, up to 8 viewers in the same room ([plan](.claude/multi-viewer-plan.md))
 - [ ] Server-side persistent stats — track date, games, scores, average, game type, slowest/fastest guess per session. Add player name system so matchup history (who played whom) is recorded. Historical trends viewable from client
 - [ ] Dynamic word difficulty — calculate difficulty from historical data (guess time + skip rate relative to other words). Display word color based on difficulty. No filtering, just informational
-- [ ] Spectator mode — read-only viewers who can watch a networked game in progress
+- [ ] ~~Spectator mode~~ — superseded by multi-viewer support
 
 ## Completed
 

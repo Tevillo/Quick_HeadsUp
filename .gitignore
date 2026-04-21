@@ -1,0 +1,16 @@
+# Rust build output
+/target/
+**/target/
+
+# Cargo
+Cargo.lock.bak
+**/*.rs.bk
+
+# Backup and temp files
+*.swp
+*.swo
+*~
+
+# OS metadata
+.DS_Store
+Thumbs.db

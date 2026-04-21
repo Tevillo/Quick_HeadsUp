@@ -2,6 +2,7 @@ use crate::config::AppConfig;
 use crate::render::{self, MenuItem};
 use crossterm::event::{Event, EventStream, KeyCode, KeyEventKind};
 use futures::StreamExt;
+use protocol::PeerId;
 
 enum Screen {
     Main,
@@ -148,10 +149,14 @@ async fn run_join_flow(
                 loop {
                     let join_result = run_join_room(&addr, reader).await;
                     match join_result {
-                        JoinRoomResult::Joined { conn, room_code } => {
+                        JoinRoomResult::Joined {
+                            conn,
+                            room_code,
+                            peer_id,
+                        } => {
                             // Drop guard before game
                             guard.take();
-                            crate::run_join(conn, &room_code).await;
+                            crate::run_join(conn, &room_code, peer_id).await;
                             // Restore guard and reader
                             *guard = Some(render::TerminalGuard::new());
                             *reader = EventStream::new();
@@ -581,6 +586,7 @@ enum JoinRoomResult {
     Joined {
         conn: crate::net::NetConnection,
         room_code: String,
+        peer_id: PeerId,
     },
     Back,
 }
@@ -630,10 +636,11 @@ async fn run_join_room(relay_addr: &str, reader: &mut EventStream) -> JoinRoomRe
                         render::render_message(&connecting_msg, term_size);
 
                         match crate::lobby::try_join_room(relay_addr, &code).await {
-                            Ok(conn) => {
+                            Ok((conn, peer_id)) => {
                                 return JoinRoomResult::Joined {
                                     conn,
                                     room_code: code,
+                                    peer_id,
                                 };
                             }
                             Err(e) => {

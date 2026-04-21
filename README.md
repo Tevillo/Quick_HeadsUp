@@ -1,6 +1,6 @@
 # Guess Up! - ASOIAF Edition
 
-A terminal-based "Guess Up" party game themed around A Song of Ice and Fire. Play solo (hold the screen to your forehead while friends give clues) or networked (two players on different machines connected through a relay server).
+A terminal-based "Guess Up" party game themed around A Song of Ice and Fire. Play solo (hold the screen to your forehead while friends give clues) or networked with up to 9 players (1 host + 8 joiners) connected through a relay server.
 
 Press `y` for correct, `n` to pass — no Enter needed.
 
@@ -26,16 +26,16 @@ Select **Solo Game** from the main menu. Adjust settings (game time, category, e
 
 ## Networked Mode
 
-Two players connect through a relay server. One player **hosts** a room (owns the game state, timer, and word list) and the other **joins** with a room code.
+Up to 9 players connect through a relay server. One player **hosts** a room (owns the game state, timer, and word list) and up to 8 others **join** with a room code.
 
 ### Hosting a Game
 
-Select **Host Game** from the main menu, then enter your relay server address (e.g. `your-server:7878`). The host lobby shows the room code and lets you adjust **Settings** while waiting for an opponent. Once a joiner connects, pick your role:
+Select **Host Game** from the main menu, then enter your relay server address (e.g. `your-server:7878`). The host lobby shows the room code, a live participant list, and lets you adjust **Settings** while waiting for players. Once at least one joiner connects, press **Start Game** and pick who will be the **Holder**:
 
-- **Viewer** — sees the word on screen and gives verbal clues
-- **Holder** — guesses based on clues and presses `y`/`n`
+- **Holder** — guesses based on clues and presses `y`/`n` (can be the host or any joiner)
+- **Viewer** — everyone else sees the word on screen and gives verbal clues
 
-After each game, the host gets a post-game menu to play again, swap roles, or quit. The room stays alive across games — no need to reconnect.
+After each game, the host gets a post-game menu to play again (same holder), pick a new holder, or quit. The room stays alive across games — no need to reconnect.
 
 ### Joining a Game
 
@@ -43,7 +43,7 @@ Select **Join Game** from the main menu, enter the relay server address, then ty
 
 ### Relay Server Setup
 
-The relay is a lightweight TCP server that forwards messages between the two players. It knows nothing about game logic — all state lives on the host client.
+The relay is a lightweight TCP server that forwards messages between players. It knows nothing about game logic — all state lives on the host client. Rooms support up to 8 joiners plus the host.
 
 **Build and deploy:**
 
@@ -157,9 +157,9 @@ Lines are trimmed and deduplicated automatically.
 - **End-of-round summary** — score, accuracy %, pace, and missed words
 - **Game history** — results saved to `~/.guess_up_history.json`
 - **Category filtering** — scrollable picker with all 25 categories
-- **Networked play** — two players on different machines via relay server
-- **Role selection** — host picks Viewer or Holder, swap after each game
-- **Post-game menu** — play again, swap roles, or quit (room stays alive)
+- **Multi-player rooms** — 1 host + up to 8 joiners via relay server
+- **Holder selection** — host picks who holds the device from a participant list
+- **Post-game menu** — play again, pick next holder, or quit (room stays alive)
 - **Address validation** — relay addresses validated before connecting
 - **Recent servers** — last 10 relay addresses remembered
 
@@ -194,8 +194,8 @@ Network Task (TCP via relay)       ---> tx --+  (networked mode only)
 | `input.rs` | Async single-keypress input via crossterm |
 | `timer.rs` | 1-second interval ticks, bonus-time support |
 | `render.rs` | Terminal guard (RAII cleanup), all rendering (game + lobby) |
-| `net.rs` | TCP connection to relay, message translation |
-| `lobby.rs` | Room setup, role selection, post-game flow |
+| `net.rs` | TCP connection to relay, message translation, broadcast/targeted routing |
+| `lobby.rs` | Room setup, multi-player lobby, holder selection, post-game flow |
 
 ## Roadmap
 

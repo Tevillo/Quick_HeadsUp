@@ -1,5 +1,7 @@
 use clap::Parser;
-use protocol::{read_frame, write_frame, ClientMessage, RelayError, RelayMessage};
+use protocol::{
+    read_frame, write_frame, ClientMessage, PeerId, RelayError, RelayMessage, HOST_PEER_ID,
+};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -7,6 +9,8 @@ use tokio::io::{BufReader, BufWriter};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{mpsc, Mutex, RwLock};
 use tracing::{info, warn};
+
+const MAX_PEERS_PER_ROOM: usize = 8;
 
 #[derive(Parser, Debug)]
 #[command(version, about = "Guess Up relay server")]
@@ -24,10 +28,49 @@ struct Args {
     room_timeout: u64,
 }
 
+struct Peer {
+    tx: mpsc::Sender<RelayMessage>,
+    peer_id: PeerId,
+}
+
 struct Room {
     host_tx: mpsc::Sender<RelayMessage>,
-    joiner_tx: Option<mpsc::Sender<RelayMessage>>,
+    peers: Vec<Peer>,
+    next_peer_id: PeerId,
     created_at: Instant,
+}
+
+impl Room {
+    /// Send a message to all peers, optionally excluding one.
+    async fn broadcast_to_peers(&self, msg: &RelayMessage, exclude: Option<PeerId>) {
+        for peer in &self.peers {
+            if exclude == Some(peer.peer_id) {
+                continue;
+            }
+            let _ = peer.tx.send(msg.clone()).await;
+        }
+    }
+
+    /// Send a message to a specific peer. Returns false if peer not found.
+    async fn send_to_peer(&self, peer_id: PeerId, msg: RelayMessage) -> bool {
+        for peer in &self.peers {
+            if peer.peer_id == peer_id {
+                let _ = peer.tx.send(msg).await;
+                return true;
+            }
+        }
+        false
+    }
+
+    /// Remove a peer from the room by ID.
+    fn remove_peer(&mut self, peer_id: PeerId) {
+        self.peers.retain(|p| p.peer_id != peer_id);
+    }
+
+    /// Get a list of all peer IDs currently in the room.
+    fn peer_ids(&self) -> Vec<PeerId> {
+        self.peers.iter().map(|p| p.peer_id).collect()
+    }
 }
 
 struct RelayServer {
@@ -51,7 +94,10 @@ impl RelayServer {
         (0..5).map(|_| rng.gen_range(b'A'..=b'Z') as char).collect()
     }
 
-    async fn create_room(&self, host_tx: mpsc::Sender<RelayMessage>) -> Result<String, RelayError> {
+    async fn create_room(
+        &self,
+        host_tx: mpsc::Sender<RelayMessage>,
+    ) -> Result<(String, Arc<Mutex<Room>>), RelayError> {
         let rooms = self.rooms.read().await;
         if rooms.len() >= self.max_rooms {
             return Err(RelayError::ServerFull);
@@ -67,39 +113,48 @@ impl RelayServer {
             }
         };
 
-        rooms.insert(
-            code.clone(),
-            Arc::new(Mutex::new(Room {
-                host_tx,
-                joiner_tx: None,
-                created_at: Instant::now(),
-            })),
-        );
+        let room = Arc::new(Mutex::new(Room {
+            host_tx,
+            peers: Vec::new(),
+            next_peer_id: 1,
+            created_at: Instant::now(),
+        }));
 
-        Ok(code)
+        rooms.insert(code.clone(), Arc::clone(&room));
+
+        Ok((code, room))
     }
 
     async fn join_room(
         &self,
         code: &str,
         joiner_tx: mpsc::Sender<RelayMessage>,
-    ) -> Result<Arc<Mutex<Room>>, RelayError> {
+    ) -> Result<(Arc<Mutex<Room>>, PeerId), RelayError> {
         let rooms = self.rooms.read().await;
         let room = rooms.get(code).ok_or(RelayError::RoomNotFound)?;
         let room = Arc::clone(room);
         drop(rooms);
 
         let mut room_guard = room.lock().await;
-        if room_guard.joiner_tx.is_some() {
+        if room_guard.peers.len() >= MAX_PEERS_PER_ROOM {
             return Err(RelayError::RoomFull);
         }
-        room_guard.joiner_tx = Some(joiner_tx);
 
-        // Notify host
-        let _ = room_guard.host_tx.send(RelayMessage::PeerJoined).await;
+        let peer_id = room_guard.next_peer_id;
+        room_guard.next_peer_id = room_guard.next_peer_id.wrapping_add(1);
+
+        // Notify host and all existing peers
+        let join_msg = RelayMessage::PeerJoined { peer_id };
+        let _ = room_guard.host_tx.send(join_msg.clone()).await;
+        room_guard.broadcast_to_peers(&join_msg, None).await;
+
+        room_guard.peers.push(Peer {
+            tx: joiner_tx,
+            peer_id,
+        });
 
         drop(room_guard);
-        Ok(room)
+        Ok((room, peer_id))
     }
 
     async fn remove_room(&self, code: &str) {
@@ -188,8 +243,8 @@ async fn handle_host(
 ) -> std::io::Result<()> {
     let (tx, mut rx) = mpsc::channel::<RelayMessage>(32);
 
-    let code = match server.create_room(tx).await {
-        Ok(code) => code,
+    let (code, room) = match server.create_room(tx).await {
+        Ok(result) => result,
         Err(e) => {
             write_frame(&mut writer, &RelayMessage::Error(e)).await?;
             return Ok(());
@@ -203,9 +258,8 @@ async fn handle_host(
     )
     .await?;
 
-    // Wait for peer joined or host messages
-    // First, wait until a joiner connects by forwarding messages from the relay channel
-    let joiner_tx: mpsc::Sender<RelayMessage>;
+    let mut ping_interval = tokio::time::interval(Duration::from_secs(30));
+    ping_interval.tick().await; // skip first immediate tick
 
     loop {
         tokio::select! {
@@ -213,47 +267,47 @@ async fn handle_host(
                 match msg {
                     Some(relay_msg) => {
                         write_frame(&mut writer, &relay_msg).await?;
-                        if matches!(relay_msg, RelayMessage::PeerJoined) {
-                            // Get joiner_tx from the room
-                            let rooms = server.rooms.read().await;
-                            let room = rooms.get(&code).unwrap();
-                            let room_guard = room.lock().await;
-                            joiner_tx = room_guard.joiner_tx.clone().unwrap();
-                            drop(room_guard);
-                            drop(rooms);
-                            break;
-                        }
                     }
-                    None => {
-                        server.remove_room(&code).await;
-                        return Ok(());
-                    }
+                    None => break,
                 }
             }
             msg = read_frame::<ClientMessage, _>(&mut reader) => {
                 match msg? {
+                    Some(ClientMessage::GameData { msg: game_msg, target: None }) => {
+                        // Broadcast to all peers
+                        let relay_msg = RelayMessage::GameData { msg: game_msg, from: HOST_PEER_ID };
+                        let room_guard = room.lock().await;
+                        room_guard.broadcast_to_peers(&relay_msg, None).await;
+                    }
+                    Some(ClientMessage::GameData { msg: game_msg, target: Some(id) }) => {
+                        // Send to specific peer
+                        let relay_msg = RelayMessage::GameData { msg: game_msg, from: HOST_PEER_ID };
+                        let room_guard = room.lock().await;
+                        room_guard.send_to_peer(id, relay_msg).await;
+                    }
                     Some(ClientMessage::Disconnect) | None => {
-                        server.remove_room(&code).await;
-                        return Ok(());
+                        // Notify all peers that host disconnected
+                        let room_guard = room.lock().await;
+                        let disconnect_msg = RelayMessage::PeerDisconnected { peer_id: HOST_PEER_ID };
+                        room_guard.broadcast_to_peers(&disconnect_msg, None).await;
+                        drop(room_guard);
+                        break;
                     }
                     Some(ClientMessage::Pong) => {}
-                    Some(_) => {} // Ignore other messages before peer joins
+                    Some(_) => {} // Ignore unexpected messages
+                }
+            }
+            _ = ping_interval.tick() => {
+                if write_frame(&mut writer, &RelayMessage::Ping).await.is_err() {
+                    let room_guard = room.lock().await;
+                    let disconnect_msg = RelayMessage::PeerDisconnected { peer_id: HOST_PEER_ID };
+                    room_guard.broadcast_to_peers(&disconnect_msg, None).await;
+                    drop(room_guard);
+                    break;
                 }
             }
         }
     }
-
-    // Both connected — run forwarding
-    run_forwarding(
-        &code,
-        &server,
-        &mut reader,
-        &mut writer,
-        &mut rx,
-        &joiner_tx,
-        true,
-    )
-    .await?;
 
     server.remove_room(&code).await;
     info!("Room {} closed (host disconnected)", code);
@@ -268,93 +322,83 @@ async fn handle_joiner(
 ) -> std::io::Result<()> {
     let (tx, mut rx) = mpsc::channel::<RelayMessage>(32);
 
-    let room = match server.join_room(code, tx).await {
-        Ok(room) => room,
+    let (room, peer_id) = match server.join_room(code, tx).await {
+        Ok(result) => result,
         Err(e) => {
             write_frame(&mut writer, &RelayMessage::Error(e)).await?;
             return Ok(());
         }
     };
 
-    info!("Joiner connected to room {}", code);
-    write_frame(&mut writer, &RelayMessage::JoinedRoom).await?;
+    info!("Peer {} connected to room {}", peer_id, code);
 
-    // Get host_tx
+    // Tell the joiner their ID and who's already in the room
+    write_frame(&mut writer, &RelayMessage::JoinedRoom { peer_id }).await?;
+    let existing_peers = {
+        let room_guard = room.lock().await;
+        room_guard.peer_ids()
+    };
+    write_frame(
+        &mut writer,
+        &RelayMessage::PeerList {
+            peers: existing_peers,
+        },
+    )
+    .await?;
+
     let host_tx = {
         let room_guard = room.lock().await;
         room_guard.host_tx.clone()
     };
 
-    run_forwarding(
-        code,
-        &server,
-        &mut reader,
-        &mut writer,
-        &mut rx,
-        &host_tx,
-        false,
-    )
-    .await?;
-
-    server.remove_room(code).await;
-    info!("Room {} closed (joiner disconnected)", code);
-    Ok(())
-}
-
-async fn run_forwarding(
-    code: &str,
-    _server: &Arc<RelayServer>,
-    reader: &mut BufReader<tokio::net::tcp::OwnedReadHalf>,
-    writer: &mut BufWriter<tokio::net::tcp::OwnedWriteHalf>,
-    rx: &mut mpsc::Receiver<RelayMessage>,
-    peer_tx: &mpsc::Sender<RelayMessage>,
-    is_host: bool,
-) -> std::io::Result<()> {
-    let role = if is_host { "host" } else { "joiner" };
     let mut ping_interval = tokio::time::interval(Duration::from_secs(30));
     ping_interval.tick().await; // skip first immediate tick
 
     loop {
         tokio::select! {
-            // Messages from the relay channel (sent by peer)
             msg = rx.recv() => {
                 match msg {
                     Some(relay_msg) => {
-                        write_frame(writer, &relay_msg).await?;
+                        write_frame(&mut writer, &relay_msg).await?;
                     }
-                    None => {
-                        info!("Room {} relay channel closed for {}", code, role);
-                        break;
-                    }
+                    None => break,
                 }
             }
-
-            // Messages from this client's TCP stream
-            msg = read_frame::<ClientMessage, _>(reader) => {
+            msg = read_frame::<ClientMessage, _>(&mut reader) => {
                 match msg? {
-                    Some(ClientMessage::GameData(game_msg)) => {
-                        // Forward to peer
-                        let _ = peer_tx.send(RelayMessage::GameData(game_msg)).await;
+                    Some(ClientMessage::GameData { msg: game_msg, .. }) => {
+                        // Joiner always sends to host
+                        let relay_msg = RelayMessage::GameData { msg: game_msg, from: peer_id };
+                        let _ = host_tx.send(relay_msg).await;
                     }
-                    Some(ClientMessage::Pong) => {}
                     Some(ClientMessage::Disconnect) | None => {
-                        let _ = peer_tx.send(RelayMessage::PeerDisconnected).await;
-                        info!("Room {} {} disconnected", code, role);
+                        // Notify host and remaining peers
+                        let disconnect_msg = RelayMessage::PeerDisconnected { peer_id };
+                        let _ = host_tx.send(disconnect_msg.clone()).await;
+                        let mut room_guard = room.lock().await;
+                        room_guard.remove_peer(peer_id);
+                        room_guard.broadcast_to_peers(&disconnect_msg, None).await;
+                        drop(room_guard);
                         break;
                     }
+                    Some(ClientMessage::Pong) => {}
                     Some(_) => {} // Ignore unexpected messages
                 }
             }
-
-            // Heartbeat ping
             _ = ping_interval.tick() => {
-                if write_frame(writer, &RelayMessage::Ping).await.is_err() {
-                    let _ = peer_tx.send(RelayMessage::PeerDisconnected).await;
+                if write_frame(&mut writer, &RelayMessage::Ping).await.is_err() {
+                    let disconnect_msg = RelayMessage::PeerDisconnected { peer_id };
+                    let _ = host_tx.send(disconnect_msg.clone()).await;
+                    let mut room_guard = room.lock().await;
+                    room_guard.remove_peer(peer_id);
+                    room_guard.broadcast_to_peers(&disconnect_msg, None).await;
+                    drop(room_guard);
                     break;
                 }
             }
         }
     }
 
+    info!("Peer {} disconnected from room {}", peer_id, code);
     Ok(())
 }

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-An ASOIAF (A Song of Ice and Fire) themed "Guess Up" party game for the terminal, built in Rust. Players see a name/term on screen and press `y` (correct) or `n` (pass) before the timer runs out. Supports solo play and networked two-player mode via a relay server.
+An ASOIAF (A Song of Ice and Fire) themed "Guess Up" party game for the terminal, built in Rust. Players see a name/term on screen and press `y` (correct) or `n` (pass) before the timer runs out. Supports solo play and networked multi-player mode (1 host + up to 8 joiners) via a relay server.
 
 ## Build & Run
 
@@ -32,7 +32,7 @@ Cargo workspace with three crates:
 ```
 crates/
   protocol/   # shared message types (ClientMessage, RelayMessage, GameMessage) + TCP framing (length-prefixed JSON)
-  relay/      # standalone relay server binary — room management, message forwarding, heartbeat pings
+  relay/      # standalone relay server binary — room management (1 host + up to 8 peers), message forwarding (broadcast/targeted), heartbeat pings
   client/     # the game binary (solo + networked modes)
 ```
 
@@ -60,8 +60,8 @@ Network Task (TCP via relay)       ---> tx --+  (networked mode only)
 | `input.rs` | `input_task()` — crossterm `EventStream`, single-keypress in raw mode |
 | `timer.rs` | `timer_task()` — 1s interval ticks, bonus-time channel for extra-time mode |
 | `render.rs` | `TerminalGuard` (RAII cleanup), `MenuItem` enum, menu rendering, game rendering, flash, countdown, lobby screens, summary output |
-| `net.rs` | `NetConnection` (TCP connect/split/reassemble), `NetHandle` (spawn read/write tasks, recoverable shutdown) |
-| `lobby.rs` | Room creation, host lobby (wait for peer with settings), role selection (with settings), joiner session loop, post-game menu, connection recovery across games |
+| `net.rs` | `NetConnection` (TCP connect/split/reassemble), `NetHandle` (spawn read/write tasks, recoverable shutdown), `OutboundMsg` (Broadcast/SendTo routing) |
+| `lobby.rs` | Room creation, host lobby (wait for players with live participant list), holder selection (pick any participant), joiner session loop, post-game menu (play again / pick next holder / quit), connection recovery across games |
 
 The key invariant is that `input.rs` stays separate from `game.rs` to allow swapping input sources.
 
@@ -71,8 +71,9 @@ The key invariant is that `input.rs` stays separate from `game.rs` to allow swap
 - **Flash race condition**: `flash_screen()` clobbers the display; after 150ms it sends `GameEvent::Redraw` so the game loop re-renders the current word. Both game loops track a `flashing` flag to skip renders while the flash is on screen, preventing the game loop or timer ticks from overwriting the flash effect.
 - **Summary rendering**: `TerminalGuard` must be dropped *before* `print_output()` — otherwise the summary prints inside the alternate screen buffer and gets wiped.
 - **Connection recovery**: In networked mode, `NetHandle::shutdown()` recovers the TCP reader/writer from background tasks so the connection can be reused across games without reconnecting. Both host and joiner recover connections after each game for multi-round play.
-- **Host-authoritative model**: The host owns all game state (words, timer, score). The joiner runs `run_remote_game` which only renders based on messages received from the host. Input routing depends on role — Viewer processes `RemoteInput`, Holder processes `UserInput`.
-- **Joiner post-game**: After a game, the joiner waits for the host's next `RoleAssignment` (signaling a new round) rather than intermediate `PlayAgain`/`SwapRoles` messages. This avoids a race condition where the net read task could consume messages during shutdown.
+- **Host-authoritative model**: The host owns all game state (words, timer, score). Joiners run `run_remote_game` which only renders based on messages received from the host. Input routing depends on role — Viewer processes `RemoteInput` from the holder's `PeerId`, Holder processes `UserInput`. The host picks who the Holder is from a participant list (can be themselves or any joiner).
+- **Multi-viewer rooms**: Rooms support 1 host + up to 8 joiners. The relay server manages a `Vec<Peer>` per room, assigns monotonically increasing PeerIds, and routes messages (broadcast or targeted). Only host disconnect removes the room; joiner disconnect is non-fatal.
+- **Joiner post-game**: After a game, the joiner waits for the host's next `RoleAssignment` (signaling a new round) rather than intermediate `PlayAgain`/`PickNextHolder` messages. This avoids a race condition where the net read task could consume messages during shutdown.
 - **Menu-driven game dispatch**: `menu_loop` owns the full lifecycle — it runs games internally and loops back to the appropriate screen (server connect, room code) after each game ends, preserving menu state.
 - **Settings persistence**: `AppConfig` is loaded from `~/.guess_up_config.json` on startup and saved after each menu exit or game. `#[serde(default)]` ensures forward compatibility.
 - **Address validation**: Relay server addresses are validated (host:port format, numeric port 1-65535) before connection attempts. Errors display inline in red on the input screen.
@@ -81,10 +82,10 @@ The key invariant is that `input.rs` stays separate from `game.rs` to allow swap
 
 ### Protocol
 
-The `protocol` crate defines length-prefixed JSON framing over TCP (`read_frame`/`write_frame`, max 64KB). Three message layers:
-- **ClientMessage**: client → relay (CreateRoom, JoinRoom, GameData, Disconnect, Pong)
-- **RelayMessage**: relay → client (RoomCreated, PeerJoined, GameData, PeerDisconnected, Ping)
-- **GameMessage**: peer ↔ peer (forwarded through relay) — role assignment, word updates, timer sync, score, input, post-game actions
+The `protocol` crate defines length-prefixed JSON framing over TCP (`read_frame`/`write_frame`, max 64KB). Peers are identified by `PeerId` (u8); host is always `HOST_PEER_ID` (0), joiners get 1, 2, 3, etc. assigned by the relay. Three message layers:
+- **ClientMessage**: client → relay (CreateRoom, JoinRoom, GameData { msg, target }, Disconnect, Pong). `target: None` broadcasts, `target: Some(id)` sends to a specific peer.
+- **RelayMessage**: relay → client (RoomCreated, PeerJoined { peer_id }, JoinedRoom { peer_id }, PeerList { peers }, GameData { msg, from }, PeerDisconnected { peer_id }, Ping)
+- **GameMessage**: peer ↔ peer (forwarded through relay) — RoleAssignment { holder_id }, word updates, timer sync, score, input, post-game actions (PlayAgain, PickNextHolder, QuitSession)
 
 ## Testing
 
@@ -94,10 +95,14 @@ Manual play-testing is the primary test strategy. Key scenarios to verify:
 2. Settings → change game_time → exit → re-run → value persisted in `~/.guess_up_config.json`
 3. Solo → plays full game → returns to main menu
 4. Category picker → scroll through categories → select one → only those words appear
-5. Host → server connect screen → type address → connect → room created → settings accessible while waiting
+5. Host → server connect screen → type address → connect → room created → lobby shows player list → settings accessible while waiting
 6. Join → server connect → enter room code → wrong code shows error inline → correct code joins
-7. Networked: host + join, role selection, play-again/swap-roles flow, peer disconnect handling
-8. Room stays alive across games — PlayAgain and SwapRoles work without reconnecting
+7. Networked: host + joiners, holder selection from participant list, play-again/pick-next-holder flow, peer disconnect handling
+8. Room stays alive across games — PlayAgain and PickNextHolder work without reconnecting
+9. Multi-viewer: 1 host + multiple joiners, host picks a joiner as Holder, all viewers see words
+10. Holder rotation: after round, host picks a different Holder via "Pick Next Holder"
+11. Joiner disconnect mid-game: viewer leaves, game continues; holder leaves, round ends
+12. Room full: 9th joiner gets RoomFull error
 9. Ctrl+C during game — terminal restores cleanly
 10. `~/.guess_up_history.json` is written after a game
 
