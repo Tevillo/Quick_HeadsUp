@@ -77,11 +77,11 @@ Select **Host Game** from the main menu, then enter your relay server address (e
 - **Holder** — guesses based on clues and presses `y`/`n` (can be the host or any joiner)
 - **Viewer** — everyone else sees the word on screen and gives verbal clues
 
-After each game, the host gets a post-game menu to play again (same holder), pick a new holder, or quit. The room stays alive across games — no need to reconnect.
+After each game, the host sees the end-of-game stats (score, accuracy, pace, missed words) and post-game actions — play again (same holder), pick a new holder, or quit — in a single combined box inside the TUI. The room stays alive across games, so there's no need to reconnect.
 
 ### Joining a Game
 
-Select **Join Game** from the main menu, enter the relay server address, then type the room code the host gave you. If the code is wrong, the error appears inline so you can fix it and retry. After the game, you stay in the lobby and can join another round when the host starts one.
+Select **Join Game** from the main menu, enter the relay server address, then type the room code the host gave you. If the code is wrong, the error appears inline so you can fix it and retry. After the game, the same stats box stays on screen with a "Waiting for host..." footer until the host kicks off the next round.
 
 ### Relay Server Setup
 
@@ -196,7 +196,7 @@ Lines are trimmed and deduplicated automatically.
 - **Single-keypress input** — `y`/`n`/`q` register instantly, no Enter required
 - **Green/red flash** — visual feedback on correct/pass
 - **Live timer and score** — updated every second
-- **End-of-round summary** — score, accuracy %, pace, and missed words
+- **End-of-round summary** — score, accuracy %, pace, and missed words shown inside the TUI for solo, host, and joiner (missed words truncate with `...and N more` when the list is long)
 - **Game history** — results saved to `.history/history.json` in the install directory
 - **Category filtering** — scrollable picker with all 25 categories
 - **Color schemes** — 12 truecolor palettes (Classic, Pastel, Beige, and one for each of the nine ASOIAF great houses — Stark, Lannister, Tyrell, Martell, Greyjoy, Targaryen, Baratheon, Arryn, Tully). House Stark is the default. Pick one from **Settings → Color Scheme** — a live preview panel to the right of the list renders sample UI elements (menu, selected item, summary, error) in the hovered scheme's palette. Press Enter to keep it or Esc to cancel. Your terminal must support 24-bit color.
