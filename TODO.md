@@ -4,7 +4,7 @@
 
 Items required before cutting the next release (from triage on 2026-04-21):
 
-- [ ] Add color scheme option — starting schemes: grayscale, pastel, beige, blue
+- [x] Add color scheme option — starting schemes: grayscale, pastel, beige, blue
 - [ ] Show end-of-game stats in post-game lobby for all players (solo + networked) — score, words guessed/skipped visible to host and joiner inside the TUI; replaces the current post-exit print entirely
 - [x] Spawn a terminal when executable is run outside of one (e.g. double-clicked from file manager)
 
@@ -23,7 +23,7 @@ Deferred to a later release: low-time warning, viewer-side screen flash fix, cus
 
 ## Medium
 
-- [ ] Add color scheme option — starting schemes: grayscale, pastel, beige, blue
+- [x] Add color scheme option — starting schemes: pastel, beige, blue (shipped with 12 schemes: 3 generic + 9 ASOIAF great houses, truecolor)
 - [x] Return to lobby after game ends instead of exiting — show stats screen in-TUI, then back to menu
 - [x] Replace clap with TUI menu system ([plan](.claude/tui-menu-plan.md))
 - [ ] Show end-of-game stats in post-game lobby for all players (solo + networked) — score, words guessed/skipped visible to host and joiner inside the TUI; replaces the current post-exit print entirely

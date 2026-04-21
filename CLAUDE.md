@@ -13,7 +13,7 @@ The binary is self-contained: `guess_up` resolves its data dirs from `current_ex
 - `./lists/` — word list `.txt` files (required; startup fails with an on-screen error if missing or empty)
 - `./.history/history.json` — game history (created on first game)
 
-User config still lives at `~/.guess_up_config.json`. `AppConfig::word_file` stores a **filename** (e.g. `"ASOIAF_list.txt"`), not a path — resolution happens through `paths::word_file_path`. A `build.rs` copies the repo's `lists/` into `target/{profile}/` so `cargo run` works against the same layout as a release install.
+User config `.guess_up_config.json` lives next to the binary — resolved by `paths::config_path()` (same source-of-truth pattern as `lists/`, `.history/`). `AppConfig::word_file` stores a **filename** (e.g. `"ASOIAF_list.txt"`), not a path — resolution happens through `paths::word_file_path`. A `build.rs` copies the repo's `lists/` into `target/{profile}/` so `cargo run` works against the same layout as a release install; during development each `target/{debug,release}/` profile therefore has its own independent config file.
 
 ## Build & Run
 
@@ -25,7 +25,7 @@ cargo run -p guess_up                          # launches TUI menu
 cargo run -p relay                             # binds to 0.0.0.0:7878
 ```
 
-All game settings (game time, categories, extra-time mode, relay server, etc.) are configured through the interactive TUI menu. Settings persist between sessions in `~/.guess_up_config.json`. No CLI flags needed for the client.
+All game settings (game time, categories, extra-time mode, relay server, etc.) are configured through the interactive TUI menu. Settings persist between sessions in `.guess_up_config.json` next to the binary. No CLI flags needed for the client.
 
 ## Coding Standards
 
@@ -62,8 +62,9 @@ Network Task (TCP via relay)       ---> tx --+  (networked mode only)
 | Module | Responsibility |
 |--------|---------------|
 | `main.rs` | Word loading with category parsing, startup validation of `lists/`, game runners (solo/host/join), entry point |
-| `config.rs` | `AppConfig` struct, defaults, load/save `~/.guess_up_config.json`, `to_game_config()`. `word_file` is a filename within `lists/`, not a full path. |
-| `paths.rs` | Single source of truth for install-layout paths — `install_dir`, `lists_dir`, `history_dir`, `word_file_path`, `list_available_lists`, `ensure_history_dir`. |
+| `config.rs` | `AppConfig` struct, defaults, load/save `.guess_up_config.json` (next to the binary via `paths::config_path`), `to_game_config()`. `word_file` is a filename within `lists/`, not a full path. `color_scheme` is a scheme id (e.g. `"classic"`, `"stark"`) resolved through `theme::by_id`; default is `"stark"`, and `theme::default_scheme()` matches. |
+| `theme.rs` | Color scheme table (12 truecolor palettes — 3 generic + 9 ASOIAF great houses) and the active-scheme `OnceLock<RwLock<&'static ColorScheme>>`. `render.rs` resolves every `SetColors` call through helpers (`fg_on_primary`, `accent_on_primary`, `accent_on_selection`, `error_panel`, `summary_border_colors`, `summary_accent_colors`, `summary_success_colors`) against the active scheme. The color scheme picker (`render_color_scheme_picker`) shows a live preview panel to the right of the list — each hovered scheme is rendered as sample bars (menu text, selected item, title, summary, error) in its own palette while the menu itself stays in the currently-active scheme. Enter commits the hovered scheme via `theme::set_active`; Esc cancels without mutating active state. Flash correct/pass stay hardcoded green/red across all schemes. Requires truecolor (24-bit RGB) terminal. |
+| `paths.rs` | Single source of truth for install-layout paths — `install_dir`, `lists_dir`, `history_dir`, `config_path`, `word_file_path`, `list_available_lists`, `ensure_history_dir`, plus `mark_hidden` (no-op on non-Windows) used to set the hidden attribute on `.history/` and the config file on first create. |
 | `menu.rs` | TUI menu state machine (`menu_loop`), all screens (main, settings, word list picker, category picker, server connect, join room), game dispatch |
 | `types.rs` | `GameEvent`, `UserAction`, `GameMode`, `GameConfig`, `GameResult`, type aliases |
 | `game.rs` | `GameState`, game loop (`tokio::select!`), Fisher-Yates shuffle, history saving. `run_game` is the host/solo loop, `run_remote_game` is the joiner's display-only loop |
@@ -87,7 +88,7 @@ The key invariant is that `input.rs` stays separate from `game.rs` to allow swap
 - **Multi-viewer rooms**: Rooms support 1 host + up to 8 joiners. The relay server manages a `Vec<Peer>` per room, assigns monotonically increasing PeerIds, and routes messages (broadcast or targeted). Only host disconnect removes the room; joiner disconnect is non-fatal.
 - **Joiner post-game**: After a game, the joiner waits for the host's next `RoleAssignment` (signaling a new round) rather than intermediate `PlayAgain`/`PickNextHolder` messages. This avoids a race condition where the net read task could consume messages during shutdown.
 - **Menu-driven game dispatch**: `menu_loop` owns the full lifecycle — it runs games internally and loops back to the appropriate screen (server connect, room code) after each game ends, preserving menu state.
-- **Settings persistence**: `AppConfig` is loaded from `~/.guess_up_config.json` on startup and saved after each menu exit or game. `#[serde(default)]` ensures forward compatibility.
+- **Settings persistence**: `AppConfig` is loaded from `.guess_up_config.json` (next to the binary) on startup and saved after each menu exit or game. `#[serde(default)]` ensures forward compatibility. On Windows the file is marked hidden on first create.
 - **Address validation**: Relay server addresses are validated (host:port format, numeric port 1-65535) before connection attempts. Errors display inline in red on the input screen.
 - **Word loading**: Parses `[Category]` headers, trims lines, deduplicates via `HashSet` (case-insensitive).
 - **History**: Saved to `./.history/history.json` (next to the binary) via serde. The directory is auto-created on first save.
@@ -104,7 +105,7 @@ The `protocol` crate defines length-prefixed JSON framing over TCP (`read_frame`
 Manual play-testing is the primary test strategy. Key scenarios to verify:
 
 1. `cargo run -p guess_up` — main menu renders, arrow/hjkl navigation works
-2. Settings → change game_time → exit → re-run → value persisted in `~/.guess_up_config.json`
+2. Settings → change game_time → exit → re-run → value persisted in `.guess_up_config.json` next to the binary
 3. Solo → plays full game → returns to main menu
 4. Category picker → scroll through categories → select one → only those words appear
 5. Host → server connect screen → type address → connect → room created → lobby shows player list → settings accessible while waiting

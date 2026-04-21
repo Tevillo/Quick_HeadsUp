@@ -107,6 +107,11 @@ pub async fn menu_loop(config: &mut AppConfig) {
                         screen = Screen::Settings;
                         continue;
                     }
+                    SettingsResult::OpenColorSchemePicker => {
+                        run_color_scheme_picker(config, &mut reader).await;
+                        screen = Screen::Settings;
+                        continue;
+                    }
                 }
             }
         }
@@ -210,6 +215,7 @@ enum SettingsResult {
     Back,
     OpenCategoryPicker,
     OpenWordListPicker,
+    OpenColorSchemePicker,
 }
 
 // Settings items indexed as selectable items:
@@ -220,8 +226,9 @@ enum SettingsResult {
 // 4: Bonus Seconds
 // 5: Word List
 // 6: Category
-// 7: Back
-const SETTINGS_COUNT: usize = 8;
+// 7: Color Scheme
+// 8: Back
+const SETTINGS_COUNT: usize = 9;
 
 fn render_settings_menu(config: &AppConfig, selected: usize, term_size: (u16, u16)) {
     let game_time_val = format!("< {} >", config.game_time);
@@ -243,6 +250,7 @@ fn render_settings_menu(config: &AppConfig, selected: usize, term_size: (u16, u1
     let bonus_val = format!("< {} >", config.bonus_seconds);
     let word_list_val = config.word_file.clone();
     let cat_val = config.category.as_deref().unwrap_or("All").to_string();
+    let scheme_val = crate::theme::by_id(&config.color_scheme).name.to_string();
 
     let items = [
         MenuItem::Setting {
@@ -272,6 +280,10 @@ fn render_settings_menu(config: &AppConfig, selected: usize, term_size: (u16, u1
         MenuItem::Setting {
             label: "Category:",
             value: &cat_val,
+        },
+        MenuItem::Setting {
+            label: "Color Scheme:",
+            value: &scheme_val,
         },
         MenuItem::Action("Back"),
     ];
@@ -336,7 +348,8 @@ async fn run_settings_screen(
                 }
                 5 => return SettingsResult::OpenWordListPicker,
                 6 => return SettingsResult::OpenCategoryPicker,
-                7 => return SettingsResult::Back,
+                7 => return SettingsResult::OpenColorSchemePicker,
+                8 => return SettingsResult::Back,
                 _ => {}
             },
             KeyCode::Esc | KeyCode::Char('q') => return SettingsResult::Back,
@@ -639,6 +652,63 @@ pub async fn run_settings_inline(config: &mut AppConfig, reader: &mut EventStrea
             }
             SettingsResult::OpenWordListPicker => {
                 open_word_list_picker(config, reader).await;
+            }
+            SettingsResult::OpenColorSchemePicker => {
+                run_color_scheme_picker(config, reader).await;
+            }
+        }
+    }
+}
+
+async fn run_color_scheme_picker(config: &mut AppConfig, reader: &mut EventStream) {
+    let schemes = crate::theme::SCHEMES;
+    let items: Vec<String> = schemes.iter().map(|s| s.name.to_string()).collect();
+
+    let mut selected: usize = schemes
+        .iter()
+        .position(|s| s.id.eq_ignore_ascii_case(&config.color_scheme))
+        .unwrap_or(0);
+    let mut scroll_offset: usize = 0;
+    let visible = 15usize.min(items.len());
+
+    loop {
+        if selected < scroll_offset {
+            scroll_offset = selected;
+        } else if selected >= scroll_offset + visible {
+            scroll_offset = selected - visible + 1;
+        }
+
+        let term_size = render::terminal_size();
+        render::render_color_scheme_picker(
+            &items,
+            selected,
+            scroll_offset,
+            term_size,
+            &schemes[selected],
+        );
+
+        if let Some(Ok(Event::Key(key))) = reader.next().await {
+            if key.kind != KeyEventKind::Press {
+                continue;
+            }
+            if crate::input::is_ctrl_c(&key) {
+                crate::render::force_exit();
+            }
+            match key.code {
+                KeyCode::Up | KeyCode::Char('k') => {
+                    selected = selected.checked_sub(1).unwrap_or(items.len() - 1);
+                }
+                KeyCode::Down | KeyCode::Char('j') => {
+                    selected = (selected + 1) % items.len();
+                }
+                KeyCode::Enter => {
+                    let chosen = schemes[selected].id.to_string();
+                    config.color_scheme = chosen.clone();
+                    crate::theme::set_active(&chosen);
+                    return;
+                }
+                KeyCode::Esc | KeyCode::Char('q') => return,
+                _ => {}
             }
         }
     }

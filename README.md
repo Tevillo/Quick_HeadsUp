@@ -16,7 +16,7 @@ cargo build --release
 cargo run -p guess_up
 ```
 
-An interactive TUI menu lets you configure everything — game time, categories, extra-time mode, relay server address — without any command-line flags. Settings persist between sessions in `~/.guess_up_config.json`.
+An interactive TUI menu lets you configure everything — game time, categories, extra-time mode, relay server address — without any command-line flags. Settings persist between sessions in `.guess_up_config.json` next to the binary.
 
 Press `q` at any time to quit. The terminal always restores cleanly, even on Ctrl+C.
 
@@ -28,16 +28,17 @@ The `guess_up` binary is self-contained and expects two siblings in its director
 
 ```
 <install-dir>/
-  guess_up            # the binary
-  lists/              # one or more .txt word lists (required)
+  guess_up                  # the binary
+  lists/                    # one or more .txt word lists (required)
     ASOIAF_list.txt
-  .history/           # created automatically on first game
+  .history/                 # created automatically on first game
     history.json
+  .guess_up_config.json     # created automatically on first save
 ```
 
 Drop additional `.txt` files into `lists/` and they show up in the in-game **Word List** picker.
 
-When you run via `cargo run -p guess_up`, the build script copies the repo's `lists/` directory into `target/{debug,release}/` alongside the binary, so everything works out of the box. For release installs, copy the `guess_up` binary together with the `lists/` directory to wherever you want to run it. User config still lives at `~/.guess_up_config.json`.
+When you run via `cargo run -p guess_up`, the build script copies the repo's `lists/` directory into `target/{debug,release}/` alongside the binary, so everything works out of the box. For release installs, copy the `guess_up` binary together with the `lists/` directory to wherever you want to run it. User config (`.guess_up_config.json`) is created next to the binary on first save.
 
 ## Release Packaging
 
@@ -191,13 +192,14 @@ Lines are trimmed and deduplicated automatically.
 ## Game Features
 
 - **Interactive TUI menu** — configure all settings from the game, no CLI flags needed
-- **Persistent settings** — saved to `~/.guess_up_config.json` between sessions
+- **Persistent settings** — saved to `.guess_up_config.json` next to the binary between sessions
 - **Single-keypress input** — `y`/`n`/`q` register instantly, no Enter required
 - **Green/red flash** — visual feedback on correct/pass
 - **Live timer and score** — updated every second
 - **End-of-round summary** — score, accuracy %, pace, and missed words
 - **Game history** — results saved to `.history/history.json` in the install directory
 - **Category filtering** — scrollable picker with all 25 categories
+- **Color schemes** — 12 truecolor palettes (Classic, Pastel, Beige, and one for each of the nine ASOIAF great houses — Stark, Lannister, Tyrell, Martell, Greyjoy, Targaryen, Baratheon, Arryn, Tully). House Stark is the default. Pick one from **Settings → Color Scheme** — a live preview panel to the right of the list renders sample UI elements (menu, selected item, summary, error) in the hovered scheme's palette. Press Enter to keep it or Esc to cancel. Your terminal must support 24-bit color.
 - **Multi-player rooms** — 1 host + up to 8 joiners via relay server
 - **Holder selection** — host picks who holds the device from a participant list
 - **Post-game menu** — play again, pick next holder, or quit (room stays alive)
@@ -228,7 +230,7 @@ Network Task (TCP via relay)       ---> tx --+  (networked mode only)
 | Module | Responsibility |
 |--------|---------------|
 | `main.rs` | Word loading, startup validation of `lists/`, game runners (solo/host/join), entry point |
-| `config.rs` | `AppConfig` — persistent settings, load/save `~/.guess_up_config.json` |
+| `config.rs` | `AppConfig` — persistent settings, load/save `.guess_up_config.json` next to the binary |
 | `paths.rs` | Install-layout path resolution (binary dir, `lists/`, `.history/`) — single source of truth |
 | `menu.rs` | TUI menu system — main menu, settings, word list picker, category picker, server connect, room code screens |
 | `types.rs` | Event types, game config, result structs |
@@ -239,6 +241,7 @@ Network Task (TCP via relay)       ---> tx --+  (networked mode only)
 | `net.rs` | TCP connection to relay, message translation, broadcast/targeted routing |
 | `lobby.rs` | Room setup, multi-player lobby, holder selection, post-game flow |
 | `terminal_spawn.rs` | Detect missing TTY and re-launch inside a terminal emulator (opt-out via `--no-spawn-terminal`) |
+| `theme.rs` | Color scheme table (13 truecolor palettes) and active-scheme cell |
 
 ## Roadmap
 
