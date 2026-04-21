@@ -72,12 +72,14 @@ Network Task (TCP via relay)       ---> tx --+  (networked mode only)
 | `render.rs` | `TerminalGuard` (RAII cleanup), `MenuItem` enum, menu rendering, game rendering, flash, countdown, lobby screens, summary output |
 | `net.rs` | `NetConnection` (TCP connect/split/reassemble), `NetHandle` (spawn read/write tasks, recoverable shutdown), `OutboundMsg` (Broadcast/SendTo routing) |
 | `lobby.rs` | Room creation, host lobby (wait for players with live participant list), holder selection (pick any participant), joiner session loop, post-game menu (play again / pick next holder / quit), connection recovery across games |
+| `terminal_spawn.rs` | Detect missing TTY (`IsTerminal` on stdin+stdout) and re-launch the binary inside a terminal emulator. Linux picker: `$TERMINAL` → `xdg-terminal-exec` → built-in fallback list. Windows picker: `wt.exe` → `cmd.exe /c start`. Loop-safe via `GUESS_UP_SPAWNED=1` sentinel. Opt-out with `--no-spawn-terminal`. On total failure, appends a timestamped entry to `<install_dir>/.guess_up_launch_error.log` and exits 1. |
 
 The key invariant is that `input.rs` stays separate from `game.rs` to allow swapping input sources.
 
 ### Key Implementation Details
 
 - **TerminalGuard**: RAII pattern with `Drop` — ensures raw mode and alternate screen are cleaned up on panic or early exit.
+- **Self-spawn sentinel**: `terminal_spawn::spawn_if_needed` is the first thing `main()` runs. It skips when `--no-spawn-terminal` is passed, when `GUESS_UP_SPAWNED=1` is set (sentinel written on the child's env so we can't fork-bomb), or when either stdin/stdout is already a TTY. Only fires on full detachment (file-manager launch, detached systemd unit, etc.).
 - **Flash race condition**: `flash_screen()` clobbers the display; after 150ms it sends `GameEvent::Redraw` so the game loop re-renders the current word. Both game loops track a `flashing` flag to skip renders while the flash is on screen, preventing the game loop or timer ticks from overwriting the flash effect.
 - **Summary rendering**: `TerminalGuard` must be dropped *before* `print_output()` — otherwise the summary prints inside the alternate screen buffer and gets wiped.
 - **Connection recovery**: In networked mode, `NetHandle::shutdown()` recovers the TCP reader/writer from background tasks so the connection can be reused across games without reconnecting. Both host and joiner recover connections after each game for multi-round play.

@@ -6,6 +6,7 @@ mod menu;
 mod net;
 mod paths;
 mod render;
+mod terminal_spawn;
 mod timer;
 mod types;
 
@@ -75,6 +76,13 @@ pub fn load_categories(filename: &str) -> Vec<String> {
 
 #[tokio::main]
 async fn main() {
+    let skip_spawn = std::env::args().any(|a| a == "--no-spawn-terminal");
+    match terminal_spawn::spawn_if_needed(skip_spawn) {
+        terminal_spawn::SpawnOutcome::ShouldContinue => {}
+        terminal_spawn::SpawnOutcome::Spawned => return,
+        terminal_spawn::SpawnOutcome::Failed => std::process::exit(1),
+    }
+
     let mut config = AppConfig::load();
 
     match paths::list_available_lists() {

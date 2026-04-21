@@ -20,6 +20,8 @@ An interactive TUI menu lets you configure everything — game time, categories,
 
 Press `q` at any time to quit. The terminal always restores cleanly, even on Ctrl+C.
 
+If `guess_up` is launched without a controlling terminal (e.g. double-clicked from a file manager or a `.desktop` launcher), it detects this and re-launches itself inside a terminal emulator. On Linux it tries `$TERMINAL`, then `xdg-terminal-exec`, then a built-in fallback list (foot, alacritty, kitty, wezterm, gnome-terminal, konsole, xfce4-terminal, tilix, terminator, mate-terminal, lxterminal, xterm). On Windows it tries `wt.exe` then `cmd.exe /c start`. Pass `--no-spawn-terminal` to disable this. If no terminal can be found, a timestamped entry is appended to `.guess_up_launch_error.log` next to the binary.
+
 ## Install Layout
 
 The `guess_up` binary is self-contained and expects two siblings in its directory:
@@ -236,6 +238,7 @@ Network Task (TCP via relay)       ---> tx --+  (networked mode only)
 | `render.rs` | Terminal guard (RAII cleanup), all rendering (game + lobby) |
 | `net.rs` | TCP connection to relay, message translation, broadcast/targeted routing |
 | `lobby.rs` | Room setup, multi-player lobby, holder selection, post-game flow |
+| `terminal_spawn.rs` | Detect missing TTY and re-launch inside a terminal emulator (opt-out via `--no-spawn-terminal`) |
 
 ## Roadmap
 
