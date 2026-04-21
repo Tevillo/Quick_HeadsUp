@@ -4,6 +4,11 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 // ─── Constants ───────────────────────────────────────────────────────
 const MAX_FRAME_SIZE: u32 = 65_536; // 64KB
 
+// ─── Peer ID ─────────────────────────────────────────────────────────
+
+pub type PeerId = u8;
+pub const HOST_PEER_ID: PeerId = 0;
+
 // ─── Framing ─────────────────────────────────────────────────────────
 
 /// Write a length-prefixed JSON frame to an async writer.
@@ -50,8 +55,13 @@ pub async fn read_frame<T: DeserializeOwned, R: AsyncReadExt + Unpin>(
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ClientMessage {
     CreateRoom,
-    JoinRoom { code: String },
-    GameData(GameMessage),
+    JoinRoom {
+        code: String,
+    },
+    GameData {
+        msg: GameMessage,
+        target: Option<PeerId>,
+    },
     Disconnect,
     Pong,
 }
@@ -61,10 +71,11 @@ pub enum ClientMessage {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum RelayMessage {
     RoomCreated { code: String },
-    PeerJoined,
-    JoinedRoom,
-    GameData(GameMessage),
-    PeerDisconnected,
+    PeerJoined { peer_id: PeerId },
+    JoinedRoom { peer_id: PeerId },
+    PeerList { peers: Vec<PeerId> },
+    GameData { msg: GameMessage, from: PeerId },
+    PeerDisconnected { peer_id: PeerId },
     Error(RelayError),
     Ping,
 }
@@ -93,7 +104,7 @@ impl std::fmt::Display for RelayError {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum GameMessage {
     // Lobby
-    RoleAssignment { host_role: Role },
+    RoleAssignment { holder_id: PeerId },
     RoleAccepted,
     GameStart(NetGameConfig),
 
@@ -110,7 +121,7 @@ pub enum GameMessage {
 
     // Post-game
     PlayAgain,
-    SwapRoles,
+    PickNextHolder,
     QuitSession,
 }
 

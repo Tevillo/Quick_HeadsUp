@@ -1,7 +1,8 @@
+use crate::net::OutboundMsg;
 use crate::render;
 use crate::types::*;
 use chrono::Local;
-use protocol::{FlashKind, GameMessage, NetGameResult, Role};
+use protocol::{FlashKind, GameMessage, NetGameResult, PeerId, Role};
 use rand::seq::SliceRandom;
 use std::fs;
 use tokio::sync::mpsc;
@@ -51,20 +52,24 @@ impl GameState {
 
 /// Run the host (authoritative) game loop.
 ///
-/// - `net_tx`: if Some, send GameMessages to the remote peer
+/// - `net_tx`: if Some, send OutboundMsgs to remote peers
 /// - `local_role`: if Some, we're in networked mode. None = solo.
+/// - `holder_peer_id`: identifies which remote peer is the Holder.
+///   None if host is Holder or solo mode.
 ///
 /// In networked mode, input routing depends on role:
-/// - Viewer (local) → holder is remote → process `RemoteInput`
+/// - Viewer (local) → holder is remote → process `RemoteInput` from holder
 /// - Holder (local) → holder is local → process `UserInput`
+#[allow(clippy::too_many_arguments)]
 pub async fn run_game(
     config: GameConfig,
     words: Vec<String>,
     mut rx: EventReceiver,
     bonus_tx: Option<BonusSender>,
     flash_tx: EventSender,
-    net_tx: Option<mpsc::Sender<GameMessage>>,
+    net_tx: Option<mpsc::Sender<OutboundMsg>>,
     local_role: Option<Role>,
+    holder_peer_id: Option<PeerId>,
 ) -> GameSummary {
     let term_size = render::terminal_size();
     let mut state = GameState::new(words, config.game_time, term_size);
@@ -88,28 +93,32 @@ pub async fn run_game(
     // Send initial word to remote if networked
     if let Some(ref tx) = net_tx {
         let _ = tx
-            .send(GameMessage::WordUpdate {
+            .send(OutboundMsg::Broadcast(GameMessage::WordUpdate {
                 word: first_word.to_string(),
-            })
+            }))
             .await;
         let _ = tx
-            .send(GameMessage::TimerSync {
+            .send(OutboundMsg::Broadcast(GameMessage::TimerSync {
                 seconds_left: state.seconds_left,
-            })
+            }))
             .await;
     }
 
     while let Some(event) = rx.recv().await {
         match event {
             // Route input based on role
-            GameEvent::UserInput(action) | GameEvent::RemoteInput(action) => {
+            GameEvent::UserInput(action) | GameEvent::RemoteInput(_, action) => {
                 // Determine if this input should be processed
                 let should_process = match (local_role, &event) {
                     // Solo mode: process all UserInput
                     (None, GameEvent::UserInput(_)) => true,
-                    // Networked, local is Viewer: holder is remote, process RemoteInput
-                    (Some(Role::Viewer), GameEvent::RemoteInput(_)) => true,
-                    // Networked, local is Holder: holder is local, process UserInput
+                    // Networked, host is Viewer: holder is remote, process RemoteInput from holder
+                    (Some(Role::Viewer), GameEvent::RemoteInput(pid, _))
+                        if Some(*pid) == holder_peer_id =>
+                    {
+                        true
+                    }
+                    // Networked, host is Holder: process local UserInput
                     (Some(Role::Holder), GameEvent::UserInput(_)) => true,
                     // Networked, local is Viewer: forward local quit but ignore y/n
                     (Some(Role::Viewer), GameEvent::UserInput(UserAction::Quit)) => true,
@@ -131,7 +140,11 @@ pub async fn run_game(
                         flashing = true;
                         render::flash_correct(flash_tx.clone());
                         if let Some(ref tx) = net_tx {
-                            let _ = tx.send(GameMessage::Flash(FlashKind::Correct)).await;
+                            let _ = tx
+                                .send(OutboundMsg::Broadcast(GameMessage::Flash(
+                                    FlashKind::Correct,
+                                )))
+                                .await;
                         }
                         if let (Some(ref tx), GameMode::ExtraTime { bonus_seconds }) =
                             (&bonus_tx, &config.mode)
@@ -144,7 +157,11 @@ pub async fn run_game(
                         flashing = true;
                         render::flash_incorrect(flash_tx.clone());
                         if let Some(ref tx) = net_tx {
-                            let _ = tx.send(GameMessage::Flash(FlashKind::Incorrect)).await;
+                            let _ = tx
+                                .send(OutboundMsg::Broadcast(GameMessage::Flash(
+                                    FlashKind::Incorrect,
+                                )))
+                                .await;
                         }
                     }
                     UserAction::Quit => break,
@@ -155,10 +172,10 @@ pub async fn run_game(
                 // Send score update to remote
                 if let Some(ref tx) = net_tx {
                     let _ = tx
-                        .send(GameMessage::ScoreUpdate {
+                        .send(OutboundMsg::Broadcast(GameMessage::ScoreUpdate {
                             score: state.score,
                             total: state.total_questions,
-                        })
+                        }))
                         .await;
                 }
 
@@ -169,9 +186,9 @@ pub async fn run_game(
                         }
                         if let Some(ref tx) = net_tx {
                             let _ = tx
-                                .send(GameMessage::WordUpdate {
+                                .send(OutboundMsg::Broadcast(GameMessage::WordUpdate {
                                     word: word.to_string(),
-                                })
+                                }))
                                 .await;
                         }
                     }
@@ -190,16 +207,18 @@ pub async fn run_game(
                 }
                 if let Some(ref tx) = net_tx {
                     let _ = tx
-                        .send(GameMessage::TimerSync {
+                        .send(OutboundMsg::Broadcast(GameMessage::TimerSync {
                             seconds_left: remaining,
-                        })
+                        }))
                         .await;
                 }
             }
             GameEvent::TimerExpired => {
                 render::bell();
                 if let Some(ref tx) = net_tx {
-                    let _ = tx.send(GameMessage::TimerExpired).await;
+                    let _ = tx
+                        .send(OutboundMsg::Broadcast(GameMessage::TimerExpired))
+                        .await;
                 }
                 if config.last_unlimited {
                     if let Some(word) = state.current_word() {
@@ -207,7 +226,11 @@ pub async fn run_game(
                         while let Some(evt) = rx.recv().await {
                             let action = match (&evt, local_role) {
                                 (GameEvent::UserInput(a), None | Some(Role::Holder)) => Some(*a),
-                                (GameEvent::RemoteInput(a), Some(Role::Viewer)) => Some(*a),
+                                (GameEvent::RemoteInput(pid, a), Some(Role::Viewer))
+                                    if Some(*pid) == holder_peer_id =>
+                                {
+                                    Some(*a)
+                                }
                                 _ => None,
                             };
                             if let Some(action) = action {
@@ -236,10 +259,19 @@ pub async fn run_game(
                     render_for_role(word, &state, local_role);
                 }
             }
-            GameEvent::PeerDisconnected => {
-                render::render_message("Opponent disconnected", state.term_size);
-                tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-                break;
+            GameEvent::PeerDisconnected(pid) => {
+                if Some(pid) == holder_peer_id {
+                    // Holder disconnected — end the round
+                    render::render_message("Holder disconnected", state.term_size);
+                    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                    break;
+                } else if local_role.is_some() && pid == 0 {
+                    // Host disconnected (shouldn't happen in host game, but handle it)
+                    render::render_message("Host disconnected", state.term_size);
+                    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                    break;
+                }
+                // Viewer disconnected — non-fatal, continue playing
             }
             _ => {} // Ignore Net* events in host game loop (they're for remote render)
         }
@@ -250,13 +282,15 @@ pub async fn run_game(
     // Send game over to remote
     if let Some(ref tx) = net_tx {
         let _ = tx
-            .send(GameMessage::GameOver(NetGameResult {
-                score: state.score,
-                total_questions: state.total_questions,
-                missed_words: state.missed_words.clone(),
-                game_time: config.game_time,
-                all_used,
-            }))
+            .send(OutboundMsg::Broadcast(GameMessage::GameOver(
+                NetGameResult {
+                    score: state.score,
+                    total_questions: state.total_questions,
+                    missed_words: state.missed_words.clone(),
+                    game_time: config.game_time,
+                    all_used,
+                },
+            )))
             .await;
     }
 
@@ -288,7 +322,7 @@ fn render_for_role(word: &str, state: &GameState, local_role: Option<Role>) {
 pub async fn run_remote_game(
     role: Role,
     mut rx: EventReceiver,
-    net_tx: mpsc::Sender<GameMessage>,
+    net_tx: mpsc::Sender<OutboundMsg>,
     flash_tx: EventSender,
 ) -> GameSummary {
     let term_size = render::terminal_size();
@@ -357,21 +391,28 @@ pub async fn run_remote_game(
                 // If we're the holder, forward input to host
                 if role == Role::Holder {
                     let net_action: protocol::NetUserAction = action.into();
-                    let _ = net_tx.send(GameMessage::PlayerInput(net_action)).await;
+                    let _ = net_tx
+                        .send(OutboundMsg::Broadcast(GameMessage::PlayerInput(net_action)))
+                        .await;
                     if action == UserAction::Quit {
                         break;
                     }
                 } else if action == UserAction::Quit {
                     let _ = net_tx
-                        .send(GameMessage::PlayerInput(protocol::NetUserAction::Quit))
+                        .send(OutboundMsg::Broadcast(GameMessage::PlayerInput(
+                            protocol::NetUserAction::Quit,
+                        )))
                         .await;
                     break;
                 }
             }
-            GameEvent::PeerDisconnected => {
-                render::render_message("Opponent disconnected", term_size);
-                tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-                break;
+            GameEvent::PeerDisconnected(pid) => {
+                if pid == protocol::HOST_PEER_ID {
+                    render::render_message("Host disconnected", term_size);
+                    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                    break;
+                }
+                // Other peer disconnects: ignore (host handles it)
             }
             GameEvent::Redraw => {
                 flashing = false;

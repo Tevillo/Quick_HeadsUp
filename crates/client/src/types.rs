@@ -1,4 +1,4 @@
-use protocol::{FlashKind, NetGameResult, NetUserAction};
+use protocol::{FlashKind, NetGameResult, NetUserAction, PeerId};
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 
@@ -10,15 +10,24 @@ pub enum GameEvent {
     TimerExpired,
     Redraw,
 
-    // Network events (received from remote peer)
-    RemoteInput(UserAction),
+    // Network events (received from remote peers)
+    RemoteInput(PeerId, UserAction),
     NetWordUpdate(String),
     NetTimerSync(u64),
-    NetScoreUpdate { score: usize, total: usize },
+    NetScoreUpdate {
+        score: usize,
+        total: usize,
+    },
     NetFlash(FlashKind),
     NetTimerExpired,
     NetGameOver(NetGameResult),
-    PeerDisconnected,
+    PeerDisconnected(PeerId),
+
+    // Multi-viewer lobby events (produced by net_read_task, consumed during game)
+    #[allow(dead_code)]
+    PeerJoined(PeerId),
+    #[allow(dead_code)]
+    PeerList(Vec<PeerId>),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]

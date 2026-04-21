@@ -577,8 +577,8 @@ pub fn render_post_game_menu(term_size: (u16, u16)) {
     let lines = [
         "WHAT NEXT?",
         "",
-        "[P] Play again",
-        "[S] Swap roles",
+        "[P] Play again (same holder)",
+        "[N] Pick next holder",
         "[Q] Quit session",
     ];
     render_centered_box(&lines, term_size, Blue);

@@ -115,7 +115,17 @@ pub async fn run_solo(app_config: &AppConfig) {
     let timer_handle = tokio::spawn(timer::timer_task(timer_tx, app_config.game_time, bonus_rx));
 
     // Run game loop (blocks until game ends)
-    let summary = game::run_game(config, words, event_rx, bonus_sender, flash_tx, None, None).await;
+    let summary = game::run_game(
+        config,
+        words,
+        event_rx,
+        bonus_sender,
+        flash_tx,
+        None,
+        None,
+        None,
+    )
+    .await;
 
     // Abort background tasks
     input_handle.abort();
@@ -139,8 +149,8 @@ pub async fn run_host(app_config: &mut AppConfig, relay_addr: &str) {
     }
 }
 
-pub async fn run_join(conn: NetConnection, room_code: &str) {
-    if let Err(e) = lobby::run_joiner_session(conn, room_code).await {
+pub async fn run_join(conn: NetConnection, room_code: &str, my_id: u8) {
+    if let Err(e) = lobby::run_joiner_session(conn, room_code, my_id).await {
         show_error(&format!("{}", e)).await;
     }
 }
