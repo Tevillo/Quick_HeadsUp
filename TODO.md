@@ -19,6 +19,7 @@
 - [ ] Print game summary to all players — show end-of-game stats (score, words guessed/skipped) to both host and joiner in networked mode
 - [ ] Round-based multiplayer — multiple rounds with automatic role swapping and cumulative scoring
 - [ ] Spawn a terminal when executable is run outside of one (e.g. double-clicked from file manager)
+- [ ] Self-contained install layout — ship `guess_up` so it runs from its own directory with two sibling dirs adjacent to the binary: a hidden `.history/` dir for game history (replacing `~/.guess_up_history.json`) and a `lists/` dir for word lists (replacing the hardcoded `files/ASOIAF_list.txt` path)
 
 ## Hard
 

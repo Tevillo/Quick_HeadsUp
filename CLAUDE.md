@@ -123,11 +123,13 @@ Manual play-testing is the primary test strategy. Key scenarios to verify:
 
 Violating this rule means lost work, broken workflows, and angry maintainers. **There are ZERO acceptable reasons to push to main.**
 
+**Exception — `TODO.md`:** Changes limited to `TODO.md` may be committed and pushed directly to `main` without a feature branch or pull request. This exception applies *only* when `TODO.md` is the sole modified file in the commit; any commit that also touches other files must follow the standard feature-branch + PR workflow.
+
 ## Git Workflow
 
 - Feature branches merged via pull requests.
 - Branch naming: descriptive kebab-case names (e.g. `flashing-lights`, `p2p-networked-mode`).
-- **All changes go through PRs. Direct pushes to `main` are forbidden.**
+- **All changes go through PRs. Direct pushes to `main` are forbidden** — except for `TODO.md`-only changes, which may be pushed directly to `main`.
 
 ## Future Plans
 
