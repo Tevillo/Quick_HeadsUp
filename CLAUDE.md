@@ -6,6 +6,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 An ASOIAF (A Song of Ice and Fire) themed "Guess Up" party game for the terminal, built in Rust. Players see a name/term on screen and press `y` (correct) or `n` (pass) before the timer runs out. Supports solo play and networked multi-player mode (1 host + up to 8 joiners) via a relay server.
 
+## Install Layout
+
+The binary is self-contained: `guess_up` resolves its data dirs from `current_exe()?.parent()` via `crates/client/src/paths.rs` (the single source of truth — never reach for `current_exe()` or `dirs::home_dir()` for install-layout paths elsewhere). Two siblings live next to the binary:
+
+- `./lists/` — word list `.txt` files (required; startup fails with an on-screen error if missing or empty)
+- `./.history/history.json` — game history (created on first game)
+
+User config still lives at `~/.guess_up_config.json`. `AppConfig::word_file` stores a **filename** (e.g. `"ASOIAF_list.txt"`), not a path — resolution happens through `paths::word_file_path`. A `build.rs` copies the repo's `lists/` into `target/{profile}/` so `cargo run` works against the same layout as a release install.
+
 ## Build & Run
 
 ```bash
@@ -52,9 +61,10 @@ Network Task (TCP via relay)       ---> tx --+  (networked mode only)
 
 | Module | Responsibility |
 |--------|---------------|
-| `main.rs` | Word loading with category parsing, game runners (solo/host/join), entry point |
-| `config.rs` | `AppConfig` struct, defaults, load/save `~/.guess_up_config.json`, `to_game_config()` |
-| `menu.rs` | TUI menu state machine (`menu_loop`), all screens (main, settings, category picker, server connect, join room), game dispatch |
+| `main.rs` | Word loading with category parsing, startup validation of `lists/`, game runners (solo/host/join), entry point |
+| `config.rs` | `AppConfig` struct, defaults, load/save `~/.guess_up_config.json`, `to_game_config()`. `word_file` is a filename within `lists/`, not a full path. |
+| `paths.rs` | Single source of truth for install-layout paths — `install_dir`, `lists_dir`, `history_dir`, `word_file_path`, `list_available_lists`, `ensure_history_dir`. |
+| `menu.rs` | TUI menu state machine (`menu_loop`), all screens (main, settings, word list picker, category picker, server connect, join room), game dispatch |
 | `types.rs` | `GameEvent`, `UserAction`, `GameMode`, `GameConfig`, `GameResult`, type aliases |
 | `game.rs` | `GameState`, game loop (`tokio::select!`), Fisher-Yates shuffle, history saving. `run_game` is the host/solo loop, `run_remote_game` is the joiner's display-only loop |
 | `input.rs` | `input_task()` — crossterm `EventStream`, single-keypress in raw mode |
@@ -78,7 +88,7 @@ The key invariant is that `input.rs` stays separate from `game.rs` to allow swap
 - **Settings persistence**: `AppConfig` is loaded from `~/.guess_up_config.json` on startup and saved after each menu exit or game. `#[serde(default)]` ensures forward compatibility.
 - **Address validation**: Relay server addresses are validated (host:port format, numeric port 1-65535) before connection attempts. Errors display inline in red on the input screen.
 - **Word loading**: Parses `[Category]` headers, trims lines, deduplicates via `HashSet` (case-insensitive).
-- **History**: Saved to `~/.guess_up_history.json` via serde.
+- **History**: Saved to `./.history/history.json` (next to the binary) via serde. The directory is auto-created on first save.
 
 ### Protocol
 
@@ -104,7 +114,9 @@ Manual play-testing is the primary test strategy. Key scenarios to verify:
 11. Joiner disconnect mid-game: viewer leaves, game continues; holder leaves, round ends
 12. Room full: 9th joiner gets RoomFull error
 9. Ctrl+C during game — terminal restores cleanly
-10. `~/.guess_up_history.json` is written after a game
+10. `./.history/history.json` (next to the binary) is written after a game
+11. `lists/` missing or empty → startup shows a clear on-screen error and exits
+12. Dropping a new `.txt` into `lists/` makes it appear in the Word List picker
 
 ## Working With Claude
 
@@ -133,12 +145,12 @@ Violating this rule means lost work, broken workflows, and angry maintainers. **
 
 ## Future Plans
 
-- **Game history CLI viewer**: View `~/.guess_up_history.json` from the command line.
+- **Game history CLI viewer**: View `./.history/history.json` (next to the binary) from the command line.
 - **Configurable key bindings**: Currently hardcoded to y/n/q.
 
 ## Word List
 
-`files/ASOIAF_list.txt` — 420 entries across 25 categories (House Stark, Dragons, Valyrian Steel, Theories, etc.). Format:
+`lists/ASOIAF_list.txt` — 420 entries across 25 categories (House Stark, Dragons, Valyrian Steel, Theories, etc.). Additional `.txt` files in `lists/` are discovered automatically and appear in the in-game Word List picker. Format:
 
 ```
 [Category Name]

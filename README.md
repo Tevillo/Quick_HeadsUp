@@ -20,6 +20,45 @@ An interactive TUI menu lets you configure everything — game time, categories,
 
 Press `q` at any time to quit. The terminal always restores cleanly, even on Ctrl+C.
 
+## Install Layout
+
+The `guess_up` binary is self-contained and expects two siblings in its directory:
+
+```
+<install-dir>/
+  guess_up            # the binary
+  lists/              # one or more .txt word lists (required)
+    ASOIAF_list.txt
+  .history/           # created automatically on first game
+    history.json
+```
+
+Drop additional `.txt` files into `lists/` and they show up in the in-game **Word List** picker.
+
+When you run via `cargo run -p guess_up`, the build script copies the repo's `lists/` directory into `target/{debug,release}/` alongside the binary, so everything works out of the box. For release installs, copy the `guess_up` binary together with the `lists/` directory to wherever you want to run it. User config still lives at `~/.guess_up_config.json`.
+
+## Release Packaging
+
+A `Makefile` at the repo root builds distributable archives for Linux and Windows:
+
+```bash
+make release          # build all 4 archives
+make release-linux    # Linux only
+make release-windows  # Windows only
+make help             # list all targets
+```
+
+Output lands in `./dist/`:
+
+| Archive | Contents |
+|---------|----------|
+| `guess_up-<ver>-linux-x86_64.tar.gz`   | `guess_up` + `lists/` + `README.md` |
+| `guess_up-<ver>-windows-x86_64.zip`    | `guess_up.exe` + `lists/` + `README.md` |
+| `relay-<ver>-linux-x86_64.tar.gz`      | `relay` |
+| `relay-<ver>-windows-x86_64.zip`       | `relay.exe` |
+
+Requirements: the two rustup targets (`rustup target add x86_64-unknown-linux-gnu x86_64-pc-windows-gnu`), `x86_64-w64-mingw32-gcc` for Windows cross-linking (configured in `.cargo/config.toml`), plus `tar` and `zip`.
+
 ## Solo Mode
 
 Select **Solo Game** from the main menu. Adjust settings (game time, category, extra-time mode, etc.) via the **Settings** screen before starting.
@@ -134,7 +173,7 @@ In text input fields (server address, room code), type normally. `Enter` confirm
 
 ## Word List Format
 
-The included list (`files/ASOIAF_list.txt`) has 420+ entries across 25 categories. Custom word files use the same format:
+The included list (`lists/ASOIAF_list.txt`) has 420+ entries across 25 categories. Custom word files use the same format:
 
 ```
 [Category Name]
@@ -155,7 +194,7 @@ Lines are trimmed and deduplicated automatically.
 - **Green/red flash** — visual feedback on correct/pass
 - **Live timer and score** — updated every second
 - **End-of-round summary** — score, accuracy %, pace, and missed words
-- **Game history** — results saved to `~/.guess_up_history.json`
+- **Game history** — results saved to `.history/history.json` in the install directory
 - **Category filtering** — scrollable picker with all 25 categories
 - **Multi-player rooms** — 1 host + up to 8 joiners via relay server
 - **Holder selection** — host picks who holds the device from a participant list
@@ -186,9 +225,10 @@ Network Task (TCP via relay)       ---> tx --+  (networked mode only)
 
 | Module | Responsibility |
 |--------|---------------|
-| `main.rs` | Word loading, game runners (solo/host/join), entry point |
+| `main.rs` | Word loading, startup validation of `lists/`, game runners (solo/host/join), entry point |
 | `config.rs` | `AppConfig` — persistent settings, load/save `~/.guess_up_config.json` |
-| `menu.rs` | TUI menu system — main menu, settings, server connect, room code screens |
+| `paths.rs` | Install-layout path resolution (binary dir, `lists/`, `.history/`) — single source of truth |
+| `menu.rs` | TUI menu system — main menu, settings, word list picker, category picker, server connect, room code screens |
 | `types.rs` | Event types, game config, result structs |
 | `game.rs` | Game state, main loop (solo + host), remote game loop |
 | `input.rs` | Async single-keypress input via crossterm |

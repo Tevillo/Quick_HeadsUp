@@ -149,20 +149,21 @@ pub fn render_menu(title: &str, items: &[MenuItem], selected: usize, term_size: 
     let _ = stdout().flush();
 }
 
-pub fn render_category_picker(
-    categories: &[String],
+pub fn render_list_picker(
+    title: &str,
+    items: &[String],
     selected: usize,
     scroll_offset: usize,
     term_size: (u16, u16),
 ) {
     let (tw, th) = term_size;
-    let visible_count = 15usize.min(categories.len());
-    let content_width = categories
+    let visible_count = 15usize.min(items.len());
+    let content_width = items
         .iter()
         .map(|c| c.len())
         .max()
         .unwrap_or(10)
-        .max("SELECT CATEGORY".len())
+        .max(title.len())
         + 6;
 
     let box_line: String = "―".repeat(content_width - 2);
@@ -181,11 +182,7 @@ pub fn render_category_picker(
     // Title
     let _ = queue!(stdout(), MoveTo(col, start_row + 1));
     let _ = queue!(stdout(), SetColors(Colors::new(DarkYellow, Blue)));
-    print!(
-        "│ {:^width$} │",
-        "SELECT CATEGORY",
-        width = content_width - 4
-    );
+    print!("│ {:^width$} │", title, width = content_width - 4);
 
     // Scroll indicator top
     let _ = queue!(stdout(), MoveTo(col, start_row + 2));
@@ -210,7 +207,7 @@ pub fn render_category_picker(
         }
 
         let prefix = if is_selected { "> " } else { "  " };
-        let name = &categories[idx];
+        let name = &items[idx];
         print!("│ {}{:<width$} │", prefix, name, width = content_width - 6);
 
         if is_selected {
@@ -222,7 +219,7 @@ pub fn render_category_picker(
     let bottom_indicator_row = start_row + 3 + visible_count as u16;
     let _ = queue!(stdout(), MoveTo(col, bottom_indicator_row));
     let _ = queue!(stdout(), SetColors(Colors::new(White, Blue)));
-    if scroll_offset + visible_count < categories.len() {
+    if scroll_offset + visible_count < items.len() {
         print!("│ {:^width$} │", "▼ more ▼", width = content_width - 4);
     } else {
         print!("│ {:width$} │", "", width = content_width - 4);
@@ -233,6 +230,36 @@ pub fn render_category_picker(
     print!("└{}┘", box_line);
 
     let _ = stdout().flush();
+}
+
+pub fn render_category_picker(
+    categories: &[String],
+    selected: usize,
+    scroll_offset: usize,
+    term_size: (u16, u16),
+) {
+    render_list_picker(
+        "SELECT CATEGORY",
+        categories,
+        selected,
+        scroll_offset,
+        term_size,
+    );
+}
+
+pub fn render_word_list_picker(
+    lists: &[String],
+    selected: usize,
+    scroll_offset: usize,
+    term_size: (u16, u16),
+) {
+    render_list_picker(
+        "SELECT WORD LIST",
+        lists,
+        selected,
+        scroll_offset,
+        term_size,
+    );
 }
 
 pub struct TerminalGuard;

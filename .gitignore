@@ -2,6 +2,9 @@
 /target/
 **/target/
 
+# Release packaging output
+/dist/
+
 # Cargo
 Cargo.lock.bak
 **/*.rs.bk

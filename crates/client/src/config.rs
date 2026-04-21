@@ -26,7 +26,7 @@ impl Default for AppConfig {
             last_unlimited: false,
             extra_time: false,
             bonus_seconds: 5,
-            word_file: "files/ASOIAF_list.txt".to_string(),
+            word_file: "ASOIAF_list.txt".to_string(),
             category: None,
             recent_servers: Vec::new(),
         }
