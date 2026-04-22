@@ -477,7 +477,7 @@ fn validate_address(addr: &str) -> Result<(), &'static str> {
         return Err("Address cannot be empty");
     }
     let Some(colon_pos) = addr.rfind(':') else {
-        return Err("Missing port — use host:port (e.g. 192.168.1.5:7878)");
+        return Err("Missing port — use host:port (e.g. 192.168.1.5:3000)");
     };
     let host = &addr[..colon_pos];
     let port_str = &addr[colon_pos + 1..];
@@ -485,12 +485,12 @@ fn validate_address(addr: &str) -> Result<(), &'static str> {
         return Err("Host cannot be empty");
     }
     if port_str.is_empty() {
-        return Err("Port cannot be empty — use host:port (e.g. server:7878)");
+        return Err("Port cannot be empty — use host:port (e.g. server:3000)");
     }
     match port_str.parse::<u16>() {
         Ok(0) => Err("Port must be between 1 and 65535"),
         Ok(_) => Ok(()),
-        Err(_) => Err("Port must be a number (e.g. 7878)"),
+        Err(_) => Err("Port must be a number (e.g. 3000)"),
     }
 }
 

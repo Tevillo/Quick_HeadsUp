@@ -1,7 +1,10 @@
+mod room_codes;
+
 use clap::Parser;
 use protocol::{
     read_frame, write_frame, ClientMessage, PeerId, RelayError, RelayMessage, HOST_PEER_ID,
 };
+use room_codes::{MAX_POOL_ATTEMPTS, POOL};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -16,7 +19,7 @@ const MAX_PEERS_PER_ROOM: usize = 8;
 #[command(version, about = "Guess Up relay server")]
 struct Args {
     /// Address to bind to
-    #[arg(long, default_value = "0.0.0.0:7878")]
+    #[arg(long, default_value = "0.0.0.0:3000")]
     bind: String,
 
     /// Maximum number of rooms
@@ -88,10 +91,30 @@ impl RelayServer {
         }
     }
 
-    fn generate_code() -> String {
+    fn generate_random_code() -> String {
         use rand::Rng;
         let mut rng = rand::thread_rng();
         (0..5).map(|_| rng.gen_range(b'A'..=b'Z') as char).collect()
+    }
+
+    /// Pick a fresh code: try the ASOIAF pool up to MAX_POOL_ATTEMPTS times
+    /// before falling back to the random A-Z generator.
+    fn pick_code(rooms: &HashMap<String, Arc<Mutex<Room>>>) -> String {
+        use rand::seq::SliceRandom;
+        let mut rng = rand::thread_rng();
+        for _ in 0..MAX_POOL_ATTEMPTS {
+            if let Some(candidate) = POOL.choose(&mut rng) {
+                if !rooms.contains_key(*candidate) {
+                    return (*candidate).to_string();
+                }
+            }
+        }
+        loop {
+            let candidate = Self::generate_random_code();
+            if !rooms.contains_key(&candidate) {
+                return candidate;
+            }
+        }
     }
 
     async fn create_room(
@@ -105,13 +128,7 @@ impl RelayServer {
         drop(rooms);
 
         let mut rooms = self.rooms.write().await;
-        // Generate a unique code
-        let code = loop {
-            let candidate = Self::generate_code();
-            if !rooms.contains_key(&candidate) {
-                break candidate;
-            }
-        };
+        let code = Self::pick_code(&rooms);
 
         let room = Arc::new(Mutex::new(Room {
             host_tx,
@@ -228,7 +245,10 @@ async fn handle_connection(server: Arc<RelayServer>, stream: TcpStream) -> std::
 
     match first_msg {
         ClientMessage::CreateRoom => handle_host(server, reader, writer).await,
-        ClientMessage::JoinRoom { code } => handle_joiner(server, &code, reader, writer).await,
+        ClientMessage::JoinRoom { code } => {
+            let code = code.to_ascii_uppercase();
+            handle_joiner(server, &code, reader, writer).await
+        }
         _ => {
             write_frame(&mut writer, &RelayMessage::Error(RelayError::InvalidCode)).await?;
             Ok(())
