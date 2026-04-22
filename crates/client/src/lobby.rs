@@ -1,8 +1,9 @@
 use crate::config::AppConfig;
 use crate::game;
 use crate::input;
+use crate::list_menu::{self, ListKey};
 use crate::menu;
-use crate::net::{self, NetConnection};
+use crate::net::{self, ConnectError, NetConnection};
 use crate::render::{self, MenuItem};
 use crate::timer;
 use crate::types::*;
@@ -13,15 +14,26 @@ use protocol::{
 };
 use std::io::{self, ErrorKind};
 
+/// Map a `ConnectError` to an `io::Error` suitable for the upstream
+/// `io::Result`-returning caller. IO failures keep the "Could not connect to
+/// relay at X:Y:" prefix; handshake rejections pass through their clean
+/// Display format so the user sees exactly why the relay refused them.
+fn connect_error_to_io(addr: &str, err: ConnectError) -> io::Error {
+    match err {
+        ConnectError::Io(io_err) => io::Error::new(
+            ErrorKind::ConnectionRefused,
+            format!("Could not connect to relay at {}: {}", addr, io_err),
+        ),
+        other => io::Error::other(format!("{}", other)),
+    }
+}
+
 // ─── Host session ────────────────────────────────────────────────────
 
 pub async fn run_host_session(relay_addr: &str, app_config: &mut AppConfig) -> io::Result<()> {
-    let mut conn = NetConnection::connect(relay_addr).await.map_err(|e| {
-        io::Error::new(
-            ErrorKind::ConnectionRefused,
-            format!("Could not connect to relay at {}: {}", relay_addr, e),
-        )
-    })?;
+    let mut conn = NetConnection::connect(relay_addr)
+        .await
+        .map_err(|e| connect_error_to_io(relay_addr, e))?;
 
     // Create room
     conn.send_client_msg(&ClientMessage::CreateRoom).await?;
@@ -366,12 +378,9 @@ async fn run_host_game(
 /// Connect to the relay and join a room. Returns the established connection
 /// and the joiner's peer ID on success.
 pub async fn try_join_room(relay_addr: &str, code: &str) -> io::Result<(NetConnection, PeerId)> {
-    let mut conn = NetConnection::connect(relay_addr).await.map_err(|e| {
-        io::Error::new(
-            ErrorKind::ConnectionRefused,
-            format!("Could not connect to relay at {}: {}", relay_addr, e),
-        )
-    })?;
+    let mut conn = NetConnection::connect(relay_addr)
+        .await
+        .map_err(|e| connect_error_to_io(relay_addr, e))?;
 
     let code_upper = code.to_uppercase();
     conn.send_client_msg(&ClientMessage::JoinRoom {
@@ -607,14 +616,14 @@ async fn select_holder(peers: &[PeerId], app_config: &mut AppConfig) -> PeerId {
         if crate::input::is_ctrl_c(&key) {
             crate::render::force_exit();
         }
-        match key.code {
-            KeyCode::Up | KeyCode::Char('k') => {
+        match list_menu::classify_key(&key) {
+            ListKey::Up => {
                 selected = selected.checked_sub(1).unwrap_or(total_selectable - 1);
             }
-            KeyCode::Down | KeyCode::Char('j') => {
+            ListKey::Down => {
                 selected = (selected + 1) % total_selectable;
             }
-            KeyCode::Enter => {
+            ListKey::Enter => {
                 if selected == 0 {
                     return HOST_PEER_ID; // Host is holder
                 } else if selected <= peers.len() {
@@ -624,7 +633,8 @@ async fn select_holder(peers: &[PeerId], app_config: &mut AppConfig) -> PeerId {
                     menu::run_settings_inline(app_config, &mut reader).await;
                 }
             }
-            _ => {}
+            // Host can't cancel holder selection — stay in the picker.
+            ListKey::Cancel | ListKey::Unhandled => {}
         }
     }
 }
@@ -668,6 +678,15 @@ async fn run_post_game_menu(
                     if crate::input::is_ctrl_c(&key) {
                         crate::render::force_exit();
                     }
+                    // Esc / q / Q all take the quit path via classify_key's
+                    // Cancel; P/N are hotkeys that fall through Unhandled.
+                    if let ListKey::Cancel = list_menu::classify_key(&key) {
+                        conn.send_client_msg(&ClientMessage::GameData {
+                            msg: GameMessage::QuitSession,
+                            target: None,
+                        }).await?;
+                        return Ok(PostGameAction::Quit);
+                    }
                     match key.code {
                         KeyCode::Char('p') | KeyCode::Char('P') => {
                             conn.send_client_msg(&ClientMessage::GameData {
@@ -682,13 +701,6 @@ async fn run_post_game_menu(
                                 target: None,
                             }).await?;
                             return Ok(PostGameAction::PickNextHolder);
-                        }
-                        KeyCode::Char('q') | KeyCode::Char('Q') | KeyCode::Esc => {
-                            conn.send_client_msg(&ClientMessage::GameData {
-                                msg: GameMessage::QuitSession,
-                                target: None,
-                            }).await?;
-                            return Ok(PostGameAction::Quit);
                         }
                         _ => {}
                     }

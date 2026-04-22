@@ -65,6 +65,8 @@ Select **Join Game** from the main menu, enter the relay server address, then ty
 
 The relay is a lightweight TCP server that forwards messages between players. It knows nothing about game logic — all state lives on the host client. Rooms support up to 8 joiners plus the host.
 
+**Version compatibility:** the client and relay must be built from the same workspace version. On connect the client sends a magic-byte + version handshake frame; the relay rejects anything else with an inline error ("wrong protocol magic" or "version mismatch: client X, relay Y"). Upgrade both sides together.
+
 **Build and deploy:**
 
 ```bash
@@ -211,6 +213,7 @@ Network Task (TCP via relay)       ---> tx --+  (networked mode only)
 | `config.rs` | `AppConfig` — persistent settings, load/save `.guess_up_config.json` next to the binary |
 | `paths.rs` | Install-layout path resolution (binary dir, `lists/`, `.history/`) — single source of truth |
 | `menu.rs` | TUI menu system — main menu, settings, word list picker, category picker, server connect, room code screens |
+| `list_menu.rs` | Shared `ListState` + `classify_key` helpers used by list-style screens (main menu, pickers, holder/post-game menus) |
 | `types.rs` | Event types, game config, result structs |
 | `game.rs` | Game state, main loop (solo + host), remote game loop |
 | `input.rs` | Async single-keypress input via crossterm |

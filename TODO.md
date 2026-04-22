@@ -18,8 +18,8 @@
 | ✅ | Spawn a terminal when executable is run outside of one (e.g. double-clicked from file manager) | Medium | v1.0 |
 | ✅ | Change default relay port from 7878 to 3000 — applies to both the relay's bind address and the client's default server address in `AppConfig` | Easy | v1.1 |
 | ✅ | Change room code to a single ASOIAF name (<8 characters) — curate a hardcoded pool from `lists/ASOIAF_list.txt`; pool is assumed to outpace active room count (reroll on collision) | Easy | v1.1 |
-| ❌ | One-way magic-bytes + crate-version handshake (client → relay) — client sends magic bytes + `CARGO_PKG_VERSION` as the first frame on connect; relay hard-rejects on wrong magic or version mismatch. No shared secret (protocol sanity only, not access control) | Medium | v1.1 |
-| ❌ | Simplify menu code — extract a shared list-menu abstraction to eliminate duplicated up/down (↑/k, ↓/j) navigation and select/cancel handling across list-style screens in `menu.rs`. Text-input screens (server connect, join room) are excluded and keep their own pattern | Medium | v1.1 |
+| ✅ | One-way magic-bytes + crate-version handshake (client → relay) — client sends magic bytes + `CARGO_PKG_VERSION` as the first frame on connect; relay hard-rejects on wrong magic or version mismatch. No shared secret (protocol sanity only, not access control) | Medium | v1.1 |
+| ✅ | Simplify menu code — extract a shared list-menu abstraction to eliminate duplicated up/down (↑/k, ↓/j) navigation and select/cancel handling across list-style screens in `menu.rs`. Text-input screens (server connect, join room) are excluded and keep their own pattern | Medium | v1.1 |
 | ❌ | Low-time warning — visual cue when timer is running low (e.g. last 10s border turns red or timer text changes color) | Easy | v1.2 |
 | ❌ | Custom word list support — allow users to create/import their own themed word lists beyond ASOIAF (partial: drop a `.txt` into `lists/` and it's auto-discovered; no in-app create/import UI yet) | Easy | v1.2 |
 | ❌ | Round-based multiplayer — multiple rounds with automatic role swapping and cumulative scoring | Medium | v1.2 |

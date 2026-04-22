@@ -10,6 +10,8 @@ Grab a prebuilt binary from the **[latest release](https://github.com/Tevillo/Gu
 
 Press `q` any time to quit. The terminal always restores cleanly, even on Ctrl+C.
 
+For networked play the `guess_up` client and the `relay` server must be built from the same crate version. The client sends a version handshake on connect; the relay rejects any mismatch with an inline error, so both sides need to be upgraded together.
+
 ---
 ### Build From Source
 

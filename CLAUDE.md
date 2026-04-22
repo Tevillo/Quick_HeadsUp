@@ -66,12 +66,13 @@ Network Task (TCP via relay)       ---> tx --+  (networked mode only)
 | `theme.rs` | Color scheme table (12 truecolor palettes — 3 generic + 9 ASOIAF great houses) and the active-scheme `OnceLock<RwLock<&'static ColorScheme>>`. `render.rs` resolves every `SetColors` call through helpers (`fg_on_primary`, `accent_on_primary`, `accent_on_selection`, `error_panel`, `summary_border_colors`, `summary_accent_colors`, `summary_success_colors`) against the active scheme. The color scheme picker (`render_color_scheme_picker`) shows a live preview panel to the right of the list — each hovered scheme is rendered as sample bars (menu text, selected item, title, summary, error) in its own palette while the menu itself stays in the currently-active scheme. Enter commits the hovered scheme via `theme::set_active`; Esc cancels without mutating active state. Flash correct/pass stay hardcoded green/red across all schemes. Requires truecolor (24-bit RGB) terminal. |
 | `paths.rs` | Single source of truth for install-layout paths — `install_dir`, `lists_dir`, `history_dir`, `config_path`, `word_file_path`, `list_available_lists`, `ensure_history_dir`, plus `mark_hidden` (no-op on non-Windows) used to set the hidden attribute on `.history/` and the config file on first create. |
 | `menu.rs` | TUI menu state machine (`menu_loop`), all screens (main, settings, word list picker, category picker, server connect, join room), game dispatch |
+| `list_menu.rs` | Shared helpers for list-style screens — `ListState` (selected cursor + scroll offset with wraparound `on_up`/`on_down` and `ensure_visible`) and `classify_key` (maps Up/k, Down/j, Enter, Esc/q to a `ListKey` enum). Used by main menu, category picker, word list picker, holder picker, and the post-game menu's Esc/q → Quit path. Text-input screens (server connect, join room) and the color-scheme picker keep their bespoke handlers. |
 | `types.rs` | `GameEvent`, `UserAction`, `GameMode`, `GameConfig`, `GameResult`, type aliases |
 | `game.rs` | `GameState`, game loop (`tokio::select!`), Fisher-Yates shuffle, history saving. `run_game` is the host/solo loop, `run_remote_game` is the joiner's display-only loop |
 | `input.rs` | `input_task()` — crossterm `EventStream`, single-keypress in raw mode |
 | `timer.rs` | `timer_task()` — 1s interval ticks, bonus-time channel for extra-time mode |
 | `render.rs` | `TerminalGuard` (RAII cleanup), `MenuItem` enum, menu rendering, game rendering, flash, countdown, lobby screens, `render_game_summary` (in-TUI end-of-game stats box with caller-supplied action hints) |
-| `net.rs` | `NetConnection` (TCP connect/split/reassemble), `NetHandle` (spawn read/write tasks, recoverable shutdown), `OutboundMsg` (Broadcast/SendTo routing) |
+| `net.rs` | `NetConnection` (TCP connect + handshake, split/reassemble), `ConnectError` (IO / InvalidMagic / VersionMismatch / HandshakeEof), `NetHandle` (spawn read/write tasks, recoverable shutdown), `OutboundMsg` (Broadcast/SendTo routing) |
 | `lobby.rs` | Room creation, host lobby (wait for players with live participant list), holder selection (pick any participant), joiner session loop, post-game menu (play again / pick next holder / quit), connection recovery across games |
 | `terminal_spawn.rs` | Detect missing TTY (`IsTerminal` on stdin+stdout) and re-launch the binary inside a terminal emulator. Linux picker: `$TERMINAL` → `xdg-terminal-exec` → built-in fallback list. Windows picker: `wt.exe` → `cmd.exe /c start`. Loop-safe via `GUESS_UP_SPAWNED=1` sentinel. Opt-out with `--no-spawn-terminal`. On total failure, appends a timestamped entry to `<install_dir>/.guess_up_launch_error.log` and exits 1. |
 
@@ -96,7 +97,16 @@ The key invariant is that `input.rs` stays separate from `game.rs` to allow swap
 
 ### Protocol
 
-The `protocol` crate defines length-prefixed JSON framing over TCP (`read_frame`/`write_frame`, max 64KB). Peers are identified by `PeerId` (u8); host is always `HOST_PEER_ID` (0), joiners get 1, 2, 3, etc. assigned by the relay. Three message layers:
+The `protocol` crate defines length-prefixed JSON framing over TCP (`read_frame`/`write_frame`, max 64KB). Peers are identified by `PeerId` (u8); host is always `HOST_PEER_ID` (0), joiners get 1, 2, 3, etc. assigned by the relay.
+
+**Handshake preamble** (v1.1+): the first frame on every connection is a client-sent `Handshake { magic, version }`. The relay validates both fields before reading any `ClientMessage`:
+- `magic` must equal `HANDSHAKE_MAGIC` (`"GUESSUP"`) — otherwise the relay replies `HandshakeResponse::InvalidMagic` and closes.
+- `version` must exactly equal the relay's `CARGO_PKG_VERSION` — otherwise the relay replies `HandshakeResponse::VersionMismatch { relay_version }` and closes.
+- On success the relay replies `HandshakeResponse::Ok` and the normal `ClientMessage` flow begins.
+
+Client and relay must be built from the same workspace version; the handshake is a protocol-sanity check, not access control. The client surfaces rejection errors inline (e.g. `"version mismatch: client 1.1.0, relay 1.0.0"`).
+
+**Message layers:**
 - **ClientMessage**: client → relay (CreateRoom, JoinRoom, GameData { msg, target }, Disconnect, Pong). `target: None` broadcasts, `target: Some(id)` sends to a specific peer.
 - **RelayMessage**: relay → client (RoomCreated, PeerJoined { peer_id }, JoinedRoom { peer_id }, PeerList { peers }, GameData { msg, from }, PeerDisconnected { peer_id }, Ping)
 - **GameMessage**: peer ↔ peer (forwarded through relay) — RoleAssignment { holder_id }, word updates, timer sync, score, input, post-game actions (PlayAgain, PickNextHolder, QuitSession)
