@@ -1,5 +1,8 @@
 use crate::types::*;
-use protocol::{read_frame, write_frame, ClientMessage, GameMessage, PeerId, RelayMessage};
+use protocol::{
+    read_frame, write_frame, ClientMessage, GameMessage, Handshake, HandshakeResponse, PeerId,
+    RelayMessage, HANDSHAKE_MAGIC,
+};
 use tokio::io::{BufReader, BufWriter};
 use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
 use tokio::net::TcpStream;
@@ -7,6 +10,42 @@ use tokio::sync::{mpsc, oneshot};
 
 pub type Reader = BufReader<OwnedReadHalf>;
 pub type Writer = BufWriter<OwnedWriteHalf>;
+
+/// Errors produced by `NetConnection::connect`. Covers both the underlying
+/// TCP/IO failures and the handshake-layer rejections (wrong magic,
+/// version mismatch, malformed/missing response).
+#[derive(Debug)]
+pub enum ConnectError {
+    Io(std::io::Error),
+    InvalidMagic,
+    VersionMismatch { client: String, relay: String },
+    HandshakeEof,
+}
+
+impl std::fmt::Display for ConnectError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ConnectError::Io(e) => write!(f, "{}", e),
+            ConnectError::InvalidMagic => {
+                write!(f, "relay rejected connection: wrong protocol magic")
+            }
+            ConnectError::VersionMismatch { client, relay } => {
+                write!(f, "version mismatch: client {}, relay {}", client, relay)
+            }
+            ConnectError::HandshakeEof => {
+                write!(f, "relay closed connection during handshake")
+            }
+        }
+    }
+}
+
+impl std::error::Error for ConnectError {}
+
+impl From<std::io::Error> for ConnectError {
+    fn from(e: std::io::Error) -> Self {
+        ConnectError::Io(e)
+    }
+}
 
 /// Outbound message from the game loop to the net write task.
 #[derive(Debug, Clone)]
@@ -22,13 +61,32 @@ pub struct NetConnection {
 }
 
 impl NetConnection {
-    pub async fn connect(addr: &str) -> std::io::Result<Self> {
+    pub async fn connect(addr: &str) -> Result<Self, ConnectError> {
         let stream = TcpStream::connect(addr).await?;
         let (reader, writer) = stream.into_split();
-        Ok(Self {
+        let mut conn = Self {
             reader: BufReader::new(reader),
             writer: BufWriter::new(writer),
-        })
+        };
+
+        let client_version = env!("CARGO_PKG_VERSION");
+        let hs = Handshake {
+            magic: HANDSHAKE_MAGIC.to_string(),
+            version: client_version.to_string(),
+        };
+        write_frame(&mut conn.writer, &hs).await?;
+
+        match read_frame::<HandshakeResponse, _>(&mut conn.reader).await? {
+            Some(HandshakeResponse::Ok) => Ok(conn),
+            Some(HandshakeResponse::InvalidMagic) => Err(ConnectError::InvalidMagic),
+            Some(HandshakeResponse::VersionMismatch { relay_version }) => {
+                Err(ConnectError::VersionMismatch {
+                    client: client_version.to_string(),
+                    relay: relay_version,
+                })
+            }
+            None => Err(ConnectError::HandshakeEof),
+        }
     }
 
     pub async fn send_client_msg(&mut self, msg: &ClientMessage) -> std::io::Result<()> {

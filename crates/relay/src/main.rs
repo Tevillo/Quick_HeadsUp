@@ -2,7 +2,8 @@ mod room_codes;
 
 use clap::Parser;
 use protocol::{
-    read_frame, write_frame, ClientMessage, PeerId, RelayError, RelayMessage, HOST_PEER_ID,
+    read_frame, write_frame, ClientMessage, Handshake, HandshakeResponse, PeerId, RelayError,
+    RelayMessage, HANDSHAKE_MAGIC, HOST_PEER_ID,
 };
 use room_codes::{MAX_POOL_ATTEMPTS, POOL};
 use std::collections::HashMap;
@@ -236,6 +237,41 @@ async fn handle_connection(server: Arc<RelayServer>, stream: TcpStream) -> std::
     let (reader, writer) = stream.into_split();
     let mut reader = BufReader::new(reader);
     let mut writer = BufWriter::new(writer);
+
+    // Handshake: reject on wrong magic or mismatched crate version before any
+    // further traffic. Version check is an exact-match — the relay and client
+    // must be built from the same workspace version.
+    let handshake: Handshake = match read_frame(&mut reader).await? {
+        Some(msg) => msg,
+        None => return Ok(()),
+    };
+
+    if handshake.magic != HANDSHAKE_MAGIC {
+        warn!(
+            "Rejecting connection: invalid handshake magic {:?}",
+            handshake.magic
+        );
+        write_frame(&mut writer, &HandshakeResponse::InvalidMagic).await?;
+        return Ok(());
+    }
+
+    let relay_version = env!("CARGO_PKG_VERSION");
+    if handshake.version != relay_version {
+        warn!(
+            "Rejecting connection: version mismatch (client {}, relay {})",
+            handshake.version, relay_version
+        );
+        write_frame(
+            &mut writer,
+            &HandshakeResponse::VersionMismatch {
+                relay_version: relay_version.to_string(),
+            },
+        )
+        .await?;
+        return Ok(());
+    }
+
+    write_frame(&mut writer, &HandshakeResponse::Ok).await?;
 
     // Read the first message to determine role
     let first_msg: ClientMessage = match read_frame(&mut reader).await? {

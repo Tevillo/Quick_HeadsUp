@@ -1,6 +1,7 @@
 mod config;
 mod game;
 mod input;
+mod list_menu;
 mod lobby;
 mod menu;
 mod net;

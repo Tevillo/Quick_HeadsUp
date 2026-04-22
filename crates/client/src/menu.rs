@@ -1,4 +1,5 @@
 use crate::config::AppConfig;
+use crate::list_menu::{self, ListKey, ListState};
 use crate::render::{self, MenuItem};
 use crossterm::event::{Event, EventStream, KeyCode, KeyEventKind};
 use futures::StreamExt;
@@ -30,7 +31,7 @@ pub async fn menu_loop(config: &mut AppConfig) {
 
         match &screen {
             Screen::Main => {
-                let count = 5; // Solo, Host, Join, Settings, Quit
+                const MAIN_COUNT: usize = 5; // Solo, Host, Join, Settings, Quit
                 let Some(Ok(event)) = reader.next().await else {
                     continue;
                 };
@@ -43,14 +44,14 @@ pub async fn menu_loop(config: &mut AppConfig) {
                 if crate::input::is_ctrl_c(&key) {
                     crate::render::force_exit();
                 }
-                match key.code {
-                    KeyCode::Up | KeyCode::Char('k') => {
-                        selected = selected.checked_sub(1).unwrap_or(count - 1);
+                match list_menu::classify_key(&key) {
+                    ListKey::Up => {
+                        selected = selected.checked_sub(1).unwrap_or(MAIN_COUNT - 1);
                     }
-                    KeyCode::Down | KeyCode::Char('j') => {
-                        selected = (selected + 1) % count;
+                    ListKey::Down => {
+                        selected = (selected + 1) % MAIN_COUNT;
                     }
-                    KeyCode::Enter => match selected {
+                    ListKey::Enter => match selected {
                         0 => {
                             guard.take();
                             drop(reader);
@@ -79,8 +80,8 @@ pub async fn menu_loop(config: &mut AppConfig) {
                         4 => return,
                         _ => {}
                     },
-                    KeyCode::Char('q') | KeyCode::Esc => return,
-                    _ => {}
+                    ListKey::Cancel => return,
+                    ListKey::Unhandled => {}
                 }
             }
             Screen::Settings => {
@@ -371,53 +372,43 @@ async fn run_category_picker(
     items.extend(categories.iter().cloned());
 
     // Find initial selection based on current config
-    let mut selected: usize = match &config.category {
+    let initial = match &config.category {
         None => 0,
         Some(cat) => items
             .iter()
             .position(|c| c.eq_ignore_ascii_case(cat))
             .unwrap_or(0),
     };
-    let mut scroll_offset: usize = 0;
+    let mut state = ListState::new(initial);
     let visible = 15usize.min(items.len());
 
     loop {
-        // Adjust scroll to keep selection visible
-        if selected < scroll_offset {
-            scroll_offset = selected;
-        } else if selected >= scroll_offset + visible {
-            scroll_offset = selected - visible + 1;
-        }
+        state.ensure_visible(visible, items.len());
 
         let term_size = render::terminal_size();
-        render::render_category_picker(&items, selected, scroll_offset, term_size);
+        render::render_category_picker(&items, state.selected, state.scroll_offset, term_size);
 
-        if let Some(Ok(Event::Key(key))) = reader.next().await {
-            if key.kind != KeyEventKind::Press {
-                continue;
+        let Some(Ok(Event::Key(key))) = reader.next().await else {
+            continue;
+        };
+        if key.kind != KeyEventKind::Press {
+            continue;
+        }
+        if crate::input::is_ctrl_c(&key) {
+            crate::render::force_exit();
+        }
+        match list_menu::classify_key(&key) {
+            ListKey::Up => state.on_up(items.len()),
+            ListKey::Down => state.on_down(items.len()),
+            ListKey::Enter => {
+                if state.selected == 0 {
+                    return Some(None); // "All"
+                } else {
+                    return Some(Some(items[state.selected].clone()));
+                }
             }
-            if crate::input::is_ctrl_c(&key) {
-                crate::render::force_exit();
-            }
-            match key.code {
-                KeyCode::Up | KeyCode::Char('k') => {
-                    selected = selected.checked_sub(1).unwrap_or(items.len() - 1);
-                }
-                KeyCode::Down | KeyCode::Char('j') => {
-                    selected = (selected + 1) % items.len();
-                }
-                KeyCode::Enter => {
-                    if selected == 0 {
-                        return Some(None); // "All"
-                    } else {
-                        return Some(Some(items[selected].clone()));
-                    }
-                }
-                KeyCode::Esc | KeyCode::Char('q') => {
-                    return None; // Cancel, keep current
-                }
-                _ => {}
-            }
+            ListKey::Cancel => return None, // Keep current
+            ListKey::Unhandled => {}
         }
     }
 }
@@ -431,41 +422,34 @@ async fn run_word_list_picker(
 ) -> Option<String> {
     let items: Vec<String> = lists.to_vec();
 
-    let mut selected: usize = items
+    let initial = items
         .iter()
         .position(|n| n == &config.word_file)
         .unwrap_or(0);
-    let mut scroll_offset: usize = 0;
+    let mut state = ListState::new(initial);
     let visible = 15usize.min(items.len());
 
     loop {
-        if selected < scroll_offset {
-            scroll_offset = selected;
-        } else if selected >= scroll_offset + visible {
-            scroll_offset = selected - visible + 1;
-        }
+        state.ensure_visible(visible, items.len());
 
         let term_size = render::terminal_size();
-        render::render_word_list_picker(&items, selected, scroll_offset, term_size);
+        render::render_word_list_picker(&items, state.selected, state.scroll_offset, term_size);
 
-        if let Some(Ok(Event::Key(key))) = reader.next().await {
-            if key.kind != KeyEventKind::Press {
-                continue;
-            }
-            if crate::input::is_ctrl_c(&key) {
-                crate::render::force_exit();
-            }
-            match key.code {
-                KeyCode::Up | KeyCode::Char('k') => {
-                    selected = selected.checked_sub(1).unwrap_or(items.len() - 1);
-                }
-                KeyCode::Down | KeyCode::Char('j') => {
-                    selected = (selected + 1) % items.len();
-                }
-                KeyCode::Enter => return Some(items[selected].clone()),
-                KeyCode::Esc | KeyCode::Char('q') => return None,
-                _ => {}
-            }
+        let Some(Ok(Event::Key(key))) = reader.next().await else {
+            continue;
+        };
+        if key.kind != KeyEventKind::Press {
+            continue;
+        }
+        if crate::input::is_ctrl_c(&key) {
+            crate::render::force_exit();
+        }
+        match list_menu::classify_key(&key) {
+            ListKey::Up => state.on_up(items.len()),
+            ListKey::Down => state.on_down(items.len()),
+            ListKey::Enter => return Some(items[state.selected].clone()),
+            ListKey::Cancel => return None,
+            ListKey::Unhandled => {}
         }
     }
 }

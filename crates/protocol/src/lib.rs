@@ -4,10 +4,33 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 // ─── Constants ───────────────────────────────────────────────────────
 const MAX_FRAME_SIZE: u32 = 65_536; // 64KB
 
+/// Magic string sent as the first handshake frame from client to relay.
+/// The relay hard-rejects connections that don't send this exact value.
+pub const HANDSHAKE_MAGIC: &str = "GUESSUP";
+
 // ─── Peer ID ─────────────────────────────────────────────────────────
 
 pub type PeerId = u8;
 pub const HOST_PEER_ID: PeerId = 0;
+
+// ─── Handshake ───────────────────────────────────────────────────────
+
+/// First frame the client sends on connect. The relay validates both the
+/// magic and the exact crate version before accepting further messages.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Handshake {
+    pub magic: String,
+    pub version: String,
+}
+
+/// Relay's reply to a `Handshake`. Anything other than `Ok` is followed by
+/// the relay closing the connection.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum HandshakeResponse {
+    Ok,
+    InvalidMagic,
+    VersionMismatch { relay_version: String },
+}
 
 // ─── Framing ─────────────────────────────────────────────────────────
 
