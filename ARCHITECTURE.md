@@ -50,7 +50,7 @@ Up to 9 players connect through a relay server. One player **hosts** a room (own
 
 ### Hosting a Game
 
-Select **Host Game** from the main menu, then enter your relay server address (e.g. `your-server:7878`). The host lobby shows the room code, a live participant list, and lets you adjust **Settings** while waiting for players. Once at least one joiner connects, press **Start Game** and pick who will be the **Holder**:
+Select **Host Game** from the main menu, then enter your relay server address (e.g. `your-server:3000`). The host lobby shows the room code (an ASOIAF name like `HODOR` or `DROGON`), a live participant list, and lets you adjust **Settings** while waiting for players. Once at least one joiner connects, press **Start Game** and pick who will be the **Holder**:
 
 - **Holder** — guesses based on clues and presses `y`/`n` (can be the host or any joiner)
 - **Viewer** — everyone else sees the word on screen and gives verbal clues
@@ -59,7 +59,7 @@ After each game, the host sees the end-of-game stats (score, accuracy, pace, mis
 
 ### Joining a Game
 
-Select **Join Game** from the main menu, enter the relay server address, then type the room code the host gave you. If the code is wrong, the error appears inline so you can fix it and retry. After the game, the same stats box stays on screen with a "Waiting for host..." footer until the host kicks off the next round.
+Select **Join Game** from the main menu, enter the relay server address, then type the room code the host gave you (case doesn't matter — `hodor`, `HODOR`, and `Hodor` all work). If the code is wrong, the error appears inline so you can fix it and retry. After the game, the same stats box stays on screen with a "Waiting for host..." footer until the host kicks off the next round.
 
 ## Relay Server Setup
 
@@ -78,7 +78,7 @@ scp target/release/relay your-server:/usr/local/bin/guess-up-relay
 **Run it:**
 
 ```bash
-# Simplest form (binds to 0.0.0.0:7878)
+# Simplest form (binds to 0.0.0.0:3000)
 guess-up-relay
 
 # Custom options
@@ -87,14 +87,14 @@ guess-up-relay --bind 0.0.0.0:9000 --max-rooms 50 --room-timeout 1800
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--bind` | `0.0.0.0:7878` | Address and port to listen on |
+| `--bind` | `0.0.0.0:3000` | Address and port to listen on |
 | `--max-rooms` | `100` | Max concurrent rooms |
 | `--room-timeout` | `3600` | Seconds before an idle room is reaped |
 
 **Open the firewall port:**
 
 ```bash
-sudo ufw allow 7878/tcp
+sudo ufw allow 3000/tcp
 ```
 
 **Run as a systemd service (optional):**
@@ -107,7 +107,7 @@ Description=Guess Up Relay Server
 After=network.target
 
 [Service]
-ExecStart=/usr/local/bin/guess-up-relay --bind 0.0.0.0:7878
+ExecStart=/usr/local/bin/guess-up-relay --bind 0.0.0.0:3000
 Restart=on-failure
 User=nobody
 Group=nogroup
@@ -134,7 +134,7 @@ journalctl -u guess-up-relay -f
 **Verify connectivity from a client machine:**
 
 ```bash
-nc -zv your-server 7878
+nc -zv your-server 3000
 ```
 
 ## Menu Navigation
