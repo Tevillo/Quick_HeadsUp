@@ -141,7 +141,7 @@ A small, stateless (re: game logic) TCP server. ~200-300 lines.
 
 ### Core Logic
 
-1. Listen on configurable `bind` address (default `0.0.0.0:7878`)
+1. Listen on configurable `bind` address (default `0.0.0.0:3000`)
 2. On new TCP connection, read first `ClientMessage`:
    - `CreateRoom` → generate 5-char uppercase room code, store room with host's write channel, respond `RoomCreated { code }`
    - `JoinRoom { code }` → look up room, respond `JoinedRoom` to joiner + `PeerJoined` to host

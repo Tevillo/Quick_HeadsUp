@@ -22,7 +22,7 @@ cargo build --release                          # build all crates
 cargo run -p guess_up                          # launches TUI menu
 
 # Relay server
-cargo run -p relay                             # binds to 0.0.0.0:7878
+cargo run -p relay                             # binds to 0.0.0.0:3000
 ```
 
 All game settings (game time, categories, extra-time mode, relay server, etc.) are configured through the interactive TUI menu. Settings persist between sessions in `.guess_up_config.json` next to the binary. No CLI flags needed for the client.
@@ -86,10 +86,11 @@ The key invariant is that `input.rs` stays separate from `game.rs` to allow swap
 - **Connection recovery**: In networked mode, `NetHandle::shutdown()` recovers the TCP reader/writer from background tasks so the connection can be reused across games without reconnecting. Both host and joiner recover connections after each game for multi-round play.
 - **Host-authoritative model**: The host owns all game state (words, timer, score). Joiners run `run_remote_game` which only renders based on messages received from the host. Input routing depends on role — Viewer processes `RemoteInput` from the holder's `PeerId`, Holder processes `UserInput`. The host picks who the Holder is from a participant list (can be themselves or any joiner).
 - **Multi-viewer rooms**: Rooms support 1 host + up to 8 joiners. The relay server manages a `Vec<Peer>` per room, assigns monotonically increasing PeerIds, and routes messages (broadcast or targeted). Only host disconnect removes the room; joiner disconnect is non-fatal.
+- **Room codes**: Picked from a hardcoded ASOIAF pool in `crates/relay/src/room_codes.rs` (single-word alphabetic entries ≤8 chars, stored uppercase). `RelayServer::pick_code` tries the pool up to `MAX_POOL_ATTEMPTS` (8) times on collision before falling back to the legacy 5-char random A-Z generator. Joins are case-insensitive — incoming `JoinRoom { code }` is uppercased at the protocol boundary in `handle_connection`.
 - **Joiner post-game**: After a game, the joiner waits for the host's next `RoleAssignment` (signaling a new round) rather than intermediate `PlayAgain`/`PickNextHolder` messages. This avoids a race condition where the net read task could consume messages during shutdown.
 - **Menu-driven game dispatch**: `menu_loop` owns the full lifecycle — it runs games internally and loops back to the appropriate screen (server connect, room code) after each game ends, preserving menu state.
 - **Settings persistence**: `AppConfig` is loaded from `.guess_up_config.json` (next to the binary) on startup and saved after each menu exit or game. `#[serde(default)]` ensures forward compatibility. On Windows the file is marked hidden on first create.
-- **Address validation**: Relay server addresses are validated (host:port format, numeric port 1-65535) before connection attempts. Errors display inline in red on the input screen.
+- **Address validation**: Relay server addresses are validated and normalized by `menu::normalize_address` before connection attempts (numeric port 1-65535). If the user omits the port — no colon, or trailing colon with nothing after — the default `DEFAULT_RELAY_PORT` (3000) is appended. Errors display inline in red on the input screen.
 - **Word loading**: Parses `[Category]` headers, trims lines, deduplicates via `HashSet` (case-insensitive).
 - **History**: Saved to `./.history/history.json` (next to the binary) via serde. The directory is auto-created on first save.
 

@@ -16,8 +16,8 @@
 | ✅ | Add color scheme option — starting schemes: pastel, beige, blue (shipped with 12 schemes: 3 generic + 9 ASOIAF great houses, truecolor) | Medium | v1.0 |
 | ✅ | Show end-of-game stats in post-game lobby for all players (solo + networked) — score, words guessed/skipped visible to host and joiner inside the TUI; replaces the current post-exit print entirely | Medium | v1.0 |
 | ✅ | Spawn a terminal when executable is run outside of one (e.g. double-clicked from file manager) | Medium | v1.0 |
-| ❌ | Change default relay port from 7878 to 3000 — applies to both the relay's bind address and the client's default server address in `AppConfig` | Easy | v1.1 |
-| ❌ | Change room code to a single ASOIAF name (<8 characters) — curate a hardcoded pool from `lists/ASOIAF_list.txt`; pool is assumed to outpace active room count (reroll on collision) | Easy | v1.1 |
+| ✅ | Change default relay port from 7878 to 3000 — applies to both the relay's bind address and the client's default server address in `AppConfig` | Easy | v1.1 |
+| ✅ | Change room code to a single ASOIAF name (<8 characters) — curate a hardcoded pool from `lists/ASOIAF_list.txt`; pool is assumed to outpace active room count (reroll on collision) | Easy | v1.1 |
 | ❌ | One-way magic-bytes + crate-version handshake (client → relay) — client sends magic bytes + `CARGO_PKG_VERSION` as the first frame on connect; relay hard-rejects on wrong magic or version mismatch. No shared secret (protocol sanity only, not access control) | Medium | v1.1 |
 | ❌ | Simplify menu code — extract a shared list-menu abstraction to eliminate duplicated up/down (↑/k, ↓/j) navigation and select/cancel handling across list-style screens in `menu.rs`. Text-input screens (server connect, join room) are excluded and keep their own pattern | Medium | v1.1 |
 | ❌ | Low-time warning — visual cue when timer is running low (e.g. last 10s border turns red or timer text changes color) | Easy | v1.2 |
