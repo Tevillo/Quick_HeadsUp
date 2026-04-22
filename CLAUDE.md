@@ -90,7 +90,7 @@ The key invariant is that `input.rs` stays separate from `game.rs` to allow swap
 - **Joiner post-game**: After a game, the joiner waits for the host's next `RoleAssignment` (signaling a new round) rather than intermediate `PlayAgain`/`PickNextHolder` messages. This avoids a race condition where the net read task could consume messages during shutdown.
 - **Menu-driven game dispatch**: `menu_loop` owns the full lifecycle — it runs games internally and loops back to the appropriate screen (server connect, room code) after each game ends, preserving menu state.
 - **Settings persistence**: `AppConfig` is loaded from `.guess_up_config.json` (next to the binary) on startup and saved after each menu exit or game. `#[serde(default)]` ensures forward compatibility. On Windows the file is marked hidden on first create.
-- **Address validation**: Relay server addresses are validated (host:port format, numeric port 1-65535) before connection attempts. Errors display inline in red on the input screen.
+- **Address validation**: Relay server addresses are validated and normalized by `menu::normalize_address` before connection attempts (numeric port 1-65535). If the user omits the port — no colon, or trailing colon with nothing after — the default `DEFAULT_RELAY_PORT` (3000) is appended. Errors display inline in red on the input screen.
 - **Word loading**: Parses `[Category]` headers, trims lines, deduplicates via `HashSet` (case-insensitive).
 - **History**: Saved to `./.history/history.json` (next to the binary) via serde. The directory is auto-created on first save.
 

@@ -472,26 +472,33 @@ async fn run_word_list_picker(
 
 // ─── Address validation ─────────────────────────────────────────────
 
-fn validate_address(addr: &str) -> Result<(), &'static str> {
+const DEFAULT_RELAY_PORT: u16 = 3000;
+
+/// Validate the address and normalize it to `host:port`. If the user omits
+/// the port (no colon, or trailing colon with nothing after), default to
+/// `DEFAULT_RELAY_PORT`.
+fn normalize_address(addr: &str) -> Result<String, &'static str> {
+    let addr = addr.trim();
     if addr.is_empty() {
         return Err("Address cannot be empty");
     }
-    let Some(colon_pos) = addr.rfind(':') else {
-        return Err("Missing port — use host:port (e.g. 192.168.1.5:3000)");
+    let (host, port_str) = match addr.rfind(':') {
+        Some(pos) => (&addr[..pos], &addr[pos + 1..]),
+        None => (addr, ""),
     };
-    let host = &addr[..colon_pos];
-    let port_str = &addr[colon_pos + 1..];
     if host.is_empty() {
         return Err("Host cannot be empty");
     }
-    if port_str.is_empty() {
-        return Err("Port cannot be empty — use host:port (e.g. server:3000)");
-    }
-    match port_str.parse::<u16>() {
-        Ok(0) => Err("Port must be between 1 and 65535"),
-        Ok(_) => Ok(()),
-        Err(_) => Err("Port must be a number (e.g. 3000)"),
-    }
+    let port: u16 = if port_str.is_empty() {
+        DEFAULT_RELAY_PORT
+    } else {
+        match port_str.parse::<u16>() {
+            Ok(0) => return Err("Port must be between 1 and 65535"),
+            Ok(p) => p,
+            Err(_) => return Err("Port must be a number (e.g. 3000)"),
+        }
+    };
+    Ok(format!("{host}:{port}"))
 }
 
 // ─── Server connect ─────────────────────────────────────────────────
@@ -564,15 +571,12 @@ async fn run_server_connect(
             // If we're editing text input
             if editing && selected == 0 {
                 match key.code {
-                    KeyCode::Enter => {
-                        let addr = input_buf.trim().to_string();
-                        match validate_address(&addr) {
-                            Ok(()) => return ServerConnectResult::Selected(addr),
-                            Err(e) => {
-                                error_msg = Some(e);
-                            }
+                    KeyCode::Enter => match normalize_address(&input_buf) {
+                        Ok(addr) => return ServerConnectResult::Selected(addr),
+                        Err(e) => {
+                            error_msg = Some(e);
                         }
-                    }
+                    },
                     KeyCode::Esc => {
                         editing = false;
                         error_msg = None;
