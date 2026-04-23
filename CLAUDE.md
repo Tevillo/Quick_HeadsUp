@@ -170,6 +170,7 @@ Violating this rule means lost work, broken workflows, and angry maintainers. **
 
 - `TODO.md` groups items by target release (the `Release` column — e.g. `v0.2`, `v1.0`, `v1.1`).
 - **When the final item for a given release is marked ✅, bump the `version` field in every workspace `Cargo.toml` to that release number** — root `Cargo.toml` plus each crate under `crates/` (`client`, `protocol`, `relay`). Keep all workspace crates on the same version.
+- **Also bump the version line at the top of `README.md`** (the `**vX.Y.Z**` line under the title) to match. The README version must stay in lockstep with the `Cargo.toml` versions.
 - The bump belongs in the same feature branch / PR that completes the last TODO item for that release, so the merge to `main` ships the version change alongside the feature.
 - After bumping, run `cargo build` to refresh `Cargo.lock` and commit it in the same change.
 
