@@ -58,10 +58,23 @@ pub async fn run_host_session(relay_addr: &str, app_config: &mut AppConfig) -> i
         }
     };
 
-    // Holder selection
-    let mut holder_id = select_holder(&peers, app_config).await;
+    // Holder selection — auto-rotate mode starts with the host; otherwise
+    // the host picks the first holder explicitly. `auto_rotate_holder` is
+    // re-read inside the loop each round so a toggle via the holder-picker's
+    // Settings action takes effect immediately on the next post-game screen.
+    let mut holder_id = if app_config.auto_rotate_holder {
+        HOST_PEER_ID
+    } else {
+        select_holder(&peers, app_config).await
+    };
+
+    // Running session totals across all rounds played in this host session.
+    // Only surfaced in the post-game summary when auto-rotate is on.
+    let mut session_score: usize = 0;
+    let mut session_total: usize = 0;
 
     loop {
+        let auto_rotate = app_config.auto_rotate_holder;
         // Rebuild config and words from current settings each round
         let config = app_config.to_game_config();
         let words = crate::load_words(&app_config.word_file, app_config.category.as_deref());
@@ -194,11 +207,23 @@ pub async fn run_host_session(relay_addr: &str, app_config: &mut AppConfig) -> i
             }
         };
 
-        let post_action = run_post_game_menu(&mut conn, &mut peers, &summary).await?;
+        session_score += summary.score;
+        session_total += summary.total_questions;
+        let session_tally = if auto_rotate {
+            Some((session_score, session_total))
+        } else {
+            None
+        };
+
+        let post_action =
+            run_post_game_menu(&mut conn, &mut peers, &summary, session_tally, auto_rotate).await?;
         match post_action {
             PostGameAction::PlayAgain => {}
             PostGameAction::PickNextHolder => {
                 holder_id = select_holder(&peers, app_config).await;
+            }
+            PostGameAction::NextRound => {
+                holder_id = next_holder_in_rotation(holder_id, &peers);
             }
             PostGameAction::Quit => {
                 let _ = conn.send_client_msg(&ClientMessage::Disconnect).await;
@@ -206,6 +231,21 @@ pub async fn run_host_session(relay_addr: &str, app_config: &mut AppConfig) -> i
             }
         }
     }
+}
+
+/// Given the current holder and the live peers list, return the next holder
+/// in join order (host → peer1 → peer2 → … → host). If the current holder is
+/// no longer in the participant list (e.g. they disconnected mid-session),
+/// the rotation resumes from the host.
+fn next_holder_in_rotation(current: PeerId, peers: &[PeerId]) -> PeerId {
+    // Build the ordered participant list: host first, then peers in the
+    // order the relay assigned them (monotonic PeerId).
+    let mut order: Vec<PeerId> = Vec::with_capacity(peers.len() + 1);
+    order.push(HOST_PEER_ID);
+    order.extend_from_slice(peers);
+
+    let idx = order.iter().position(|&p| p == current).unwrap_or(0);
+    order[(idx + 1) % order.len()]
 }
 
 // ─── Wait for players (multi-viewer lobby) ──────────────────────────
@@ -336,6 +376,7 @@ async fn run_host_game(
 
     let input_tx = event_tx.clone();
     let timer_tx = event_tx.clone();
+    let blink_tx = event_tx.clone();
     let flash_tx = event_tx.clone();
 
     let bonus_sender = match &config.mode {
@@ -351,6 +392,7 @@ async fn run_host_game(
 
     let input_handle = tokio::spawn(input::input_task(input_tx));
     let timer_handle = tokio::spawn(timer::timer_task(timer_tx, config.game_time, bonus_rx));
+    let blink_handle = tokio::spawn(timer::blink_task(blink_tx));
 
     let summary = game::run_game(
         config.clone(),
@@ -366,6 +408,7 @@ async fn run_host_game(
 
     input_handle.abort();
     timer_handle.abort();
+    blink_handle.abort();
 
     // Recover the connection from net tasks
     let recovered = net_handle.shutdown().await;
@@ -428,6 +471,7 @@ pub async fn run_joiner_session(
                     &summary.missed_words,
                     summary.game_time,
                     summary.all_used,
+                    None,
                     &[
                         "Waiting for host to start the next round...",
                         "[Q] Quit session",
@@ -566,15 +610,18 @@ async fn run_joiner_game(
     let (event_tx, event_rx) = tokio::sync::mpsc::channel::<GameEvent>(32);
     let flash_tx = event_tx.clone();
     let input_tx = event_tx.clone();
+    let blink_tx = event_tx.clone();
 
     let net_handle = net::spawn_net_tasks(conn, event_tx);
     let net_tx = net_handle.outbound_tx.clone();
 
     let input_handle = tokio::spawn(input::input_task(input_tx));
+    let blink_handle = tokio::spawn(timer::blink_task(blink_tx));
 
     let summary = game::run_remote_game(role, event_rx, net_tx, flash_tx).await;
 
     input_handle.abort();
+    blink_handle.abort();
 
     let recovered = net_handle.shutdown().await;
     (summary, recovered)
@@ -644,6 +691,9 @@ async fn select_holder(peers: &[PeerId], app_config: &mut AppConfig) -> PeerId {
 enum PostGameAction {
     PlayAgain,
     PickNextHolder,
+    /// Auto-rotate: the host wants the next round with the holder advanced
+    /// to the next participant in join order.
+    NextRound,
     Quit,
 }
 
@@ -651,19 +701,30 @@ async fn run_post_game_menu(
     conn: &mut NetConnection,
     peers: &mut Vec<PeerId>,
     summary: &game::GameSummary,
+    session_tally: Option<(usize, usize)>,
+    auto_rotate: bool,
 ) -> io::Result<PostGameAction> {
     let term_size = render::terminal_size();
+    let actions: &[&str] = if auto_rotate {
+        &[
+            "[Enter] Start next round (holder rotates)",
+            "[Q] Quit session",
+        ]
+    } else {
+        &[
+            "[P] Play again (same holder)",
+            "[N] Pick next holder",
+            "[Q] Quit session",
+        ]
+    };
     render::render_game_summary(
         summary.score,
         summary.total_questions,
         &summary.missed_words,
         summary.game_time,
         summary.all_used,
-        &[
-            "[P] Play again (same holder)",
-            "[N] Pick next holder",
-            "[Q] Quit session",
-        ],
+        session_tally,
+        actions,
         term_size,
     );
 
@@ -679,7 +740,7 @@ async fn run_post_game_menu(
                         crate::render::force_exit();
                     }
                     // Esc / q / Q all take the quit path via classify_key's
-                    // Cancel; P/N are hotkeys that fall through Unhandled.
+                    // Cancel; P/N/Enter are hotkeys that fall through Unhandled.
                     if let ListKey::Cancel = list_menu::classify_key(&key) {
                         conn.send_client_msg(&ClientMessage::GameData {
                             msg: GameMessage::QuitSession,
@@ -687,22 +748,35 @@ async fn run_post_game_menu(
                         }).await?;
                         return Ok(PostGameAction::Quit);
                     }
-                    match key.code {
-                        KeyCode::Char('p') | KeyCode::Char('P') => {
+                    if auto_rotate {
+                        if let KeyCode::Enter = key.code {
+                            // Reuse the existing PlayAgain message — the
+                            // joiner only cares that a new round is starting,
+                            // which is signalled by the upcoming RoleAssignment.
                             conn.send_client_msg(&ClientMessage::GameData {
                                 msg: GameMessage::PlayAgain,
                                 target: None,
                             }).await?;
-                            return Ok(PostGameAction::PlayAgain);
+                            return Ok(PostGameAction::NextRound);
                         }
-                        KeyCode::Char('n') | KeyCode::Char('N') => {
-                            conn.send_client_msg(&ClientMessage::GameData {
-                                msg: GameMessage::PickNextHolder,
-                                target: None,
-                            }).await?;
-                            return Ok(PostGameAction::PickNextHolder);
+                    } else {
+                        match key.code {
+                            KeyCode::Char('p') | KeyCode::Char('P') => {
+                                conn.send_client_msg(&ClientMessage::GameData {
+                                    msg: GameMessage::PlayAgain,
+                                    target: None,
+                                }).await?;
+                                return Ok(PostGameAction::PlayAgain);
+                            }
+                            KeyCode::Char('n') | KeyCode::Char('N') => {
+                                conn.send_client_msg(&ClientMessage::GameData {
+                                    msg: GameMessage::PickNextHolder,
+                                    target: None,
+                                }).await?;
+                                return Ok(PostGameAction::PickNextHolder);
+                            }
+                            _ => {}
                         }
-                        _ => {}
                     }
                 }
             }
@@ -740,6 +814,7 @@ async fn show_summary_until_keypress(summary: &game::GameSummary, actions: &[&st
         &summary.missed_words,
         summary.game_time,
         summary.all_used,
+        None,
         actions,
         term_size,
     );

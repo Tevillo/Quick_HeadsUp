@@ -10,6 +10,9 @@ pub enum GameEvent {
     TimerExpired,
     Redraw,
 
+    /// 2Hz tick driving the low-time warning blink.
+    BlinkTick,
+
     // Network events (received from remote peers)
     RemoteInput(PeerId, UserAction),
     NetWordUpdate(String),

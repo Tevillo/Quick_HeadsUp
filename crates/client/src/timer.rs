@@ -2,6 +2,26 @@ use crate::types::{BonusReceiver, EventSender, GameEvent};
 use std::time::Duration;
 use tokio::time::{self, Instant};
 
+/// Seconds remaining at which the low-time warning kicks in.
+pub const WARNING_THRESHOLD_SECS: u64 = 10;
+
+/// Blink period for the low-time warning. 500ms = 2Hz (on/off every half-second).
+const BLINK_PERIOD: Duration = Duration::from_millis(500);
+
+/// Background task that emits a `BlinkTick` every 500ms for the full duration
+/// of the game. The game loop decides when to react (only when
+/// `seconds_left <= WARNING_THRESHOLD_SECS`).
+pub async fn blink_task(tx: EventSender) {
+    let mut interval = time::interval(BLINK_PERIOD);
+    interval.tick().await; // Skip the first immediate tick
+    loop {
+        interval.tick().await;
+        if tx.send(GameEvent::BlinkTick).await.is_err() {
+            break;
+        }
+    }
+}
+
 pub async fn timer_task(tx: EventSender, duration: u64, mut bonus_rx: BonusReceiver) {
     let mut deadline = Instant::now() + Duration::from_secs(duration);
     let mut interval = time::interval(Duration::from_secs(1));

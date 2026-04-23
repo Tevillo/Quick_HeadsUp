@@ -154,6 +154,7 @@ pub async fn run_solo(app_config: &AppConfig) {
 
     let input_tx = event_tx.clone();
     let timer_tx = event_tx.clone();
+    let blink_tx = event_tx.clone();
     let flash_tx = event_tx.clone();
 
     let bonus_sender = match &config.mode {
@@ -164,9 +165,10 @@ pub async fn run_solo(app_config: &AppConfig) {
         }
     };
 
-    // Spawn input and timer tasks
+    // Spawn input, timer, and blink tasks
     let input_handle = tokio::spawn(input::input_task(input_tx));
     let timer_handle = tokio::spawn(timer::timer_task(timer_tx, app_config.game_time, bonus_rx));
+    let blink_handle = tokio::spawn(timer::blink_task(blink_tx));
 
     // Run game loop (blocks until game ends)
     let summary = game::run_game(
@@ -184,6 +186,7 @@ pub async fn run_solo(app_config: &AppConfig) {
     // Abort background tasks
     input_handle.abort();
     timer_handle.abort();
+    blink_handle.abort();
 
     // Render summary inside the alt screen and wait for any key.
     let term_size = render::terminal_size();
@@ -193,6 +196,7 @@ pub async fn run_solo(app_config: &AppConfig) {
         &summary.missed_words,
         summary.game_time,
         summary.all_used,
+        None,
         &["Press any key to return to the main menu"],
         term_size,
     );
