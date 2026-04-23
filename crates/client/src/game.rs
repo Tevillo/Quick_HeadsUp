@@ -23,6 +23,8 @@ pub struct GameState {
     pub missed_words: Vec<String>,
     pub seconds_left: u64,
     pub term_size: (u16, u16),
+    /// Current phase of the low-time warning blink (toggled by `BlinkTick`).
+    pub blink_on: bool,
 }
 
 impl GameState {
@@ -37,6 +39,7 @@ impl GameState {
             missed_words: Vec::new(),
             seconds_left: game_time,
             term_size,
+            blink_on: false,
         }
     }
 
@@ -259,6 +262,14 @@ pub async fn run_game(
                     render_for_role(word, &state, local_role);
                 }
             }
+            GameEvent::BlinkTick => {
+                state.blink_on = !state.blink_on;
+                if !flashing && state.seconds_left <= crate::timer::WARNING_THRESHOLD_SECS {
+                    if let Some(word) = state.current_word() {
+                        render_for_role(word, &state, local_role);
+                    }
+                }
+            }
             GameEvent::PeerDisconnected(pid) => {
                 if Some(pid) == holder_peer_id {
                     // Holder disconnected — end the round
@@ -308,12 +319,19 @@ pub async fn run_game(
 
 /// Render based on role: Viewer sees the word, Holder sees "GUESS!"
 fn render_for_role(word: &str, state: &GameState, local_role: Option<Role>) {
+    let warning = render::WarningState::from(state.seconds_left, state.blink_on);
     match local_role {
         None | Some(Role::Viewer) => {
-            render::render_question(word, state.seconds_left, state.score, state.term_size);
+            render::render_question(
+                word,
+                state.seconds_left,
+                state.score,
+                warning,
+                state.term_size,
+            );
         }
         Some(Role::Holder) => {
-            render::render_holder_view(state.seconds_left, state.score, state.term_size);
+            render::render_holder_view(state.seconds_left, state.score, warning, state.term_size);
         }
     }
 }
@@ -331,6 +349,21 @@ pub async fn run_remote_game(
     let mut score: usize = 0;
     let mut total: usize = 0;
     let mut flashing = false;
+    let mut blink_on = false;
+
+    // Render helper used by every branch below — picks holder vs viewer view
+    // and resolves the current warning state from `seconds_left` / `blink_on`.
+    let render_current = |seconds_left: u64, score: usize, blink_on: bool, current_word: &str| {
+        let warning = render::WarningState::from(seconds_left, blink_on);
+        match role {
+            Role::Viewer => {
+                render::render_question(current_word, seconds_left, score, warning, term_size);
+            }
+            Role::Holder => {
+                render::render_holder_view(seconds_left, score, warning, term_size);
+            }
+        }
+    };
 
     loop {
         let Some(event) = rx.recv().await else {
@@ -341,27 +374,19 @@ pub async fn run_remote_game(
             GameEvent::NetWordUpdate(word) => {
                 current_word = word;
                 if !flashing {
-                    match role {
-                        Role::Viewer => {
-                            render::render_question(&current_word, seconds_left, score, term_size);
-                        }
-                        Role::Holder => {
-                            render::render_holder_view(seconds_left, score, term_size);
-                        }
-                    }
+                    render_current(seconds_left, score, blink_on, &current_word);
                 }
             }
             GameEvent::NetTimerSync(secs) => {
                 seconds_left = secs;
                 if !flashing {
-                    match role {
-                        Role::Viewer => {
-                            render::render_question(&current_word, seconds_left, score, term_size);
-                        }
-                        Role::Holder => {
-                            render::render_holder_view(seconds_left, score, term_size);
-                        }
-                    }
+                    render_current(seconds_left, score, blink_on, &current_word);
+                }
+            }
+            GameEvent::BlinkTick => {
+                blink_on = !blink_on;
+                if !flashing && seconds_left <= crate::timer::WARNING_THRESHOLD_SECS {
+                    render_current(seconds_left, score, blink_on, &current_word);
                 }
             }
             GameEvent::NetScoreUpdate { score: s, total: t } => {
@@ -416,14 +441,7 @@ pub async fn run_remote_game(
             }
             GameEvent::Redraw => {
                 flashing = false;
-                match role {
-                    Role::Viewer => {
-                        render::render_question(&current_word, seconds_left, score, term_size);
-                    }
-                    Role::Holder => {
-                        render::render_holder_view(seconds_left, score, term_size);
-                    }
-                }
+                render_current(seconds_left, score, blink_on, &current_word);
             }
             _ => {}
         }

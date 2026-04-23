@@ -17,6 +17,10 @@ pub struct AppConfig {
     pub category: Option<String>,
     pub recent_servers: Vec<String>,
     pub color_scheme: String,
+    /// When true (host mode only), after each round the Holder rotates to
+    /// the next participant in join order and the post-game prompt is
+    /// replaced with a "ready for next round?" confirmation.
+    pub auto_rotate_holder: bool,
 }
 
 impl Default for AppConfig {
@@ -31,6 +35,7 @@ impl Default for AppConfig {
             category: None,
             recent_servers: Vec::new(),
             color_scheme: "stark".to_string(),
+            auto_rotate_holder: true,
         }
     }
 }

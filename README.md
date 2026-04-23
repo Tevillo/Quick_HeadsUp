@@ -29,7 +29,7 @@ From the main menu, pick one of:
 | `n` | Pass / skip — next word |
 | `q` | Forfeit the round |
 
-A countdown plays at the start of each game (disable it in Settings if you prefer a cold start). The screen flashes green on correct and red on pass. When the timer hits zero you get a stats box — score, accuracy, pace, and missed words — then drop back into the menu.
+A countdown plays at the start of each game (disable it in Settings if you prefer a cold start). The screen flashes green on correct and red on pass. When the timer hits zero you get a stats box — score, accuracy, pace, and missed words — then drop back into the menu. In the last 10 seconds of the round a red border blinks around the terminal edge and the timer text turns red so a distracted Holder can't miss the clock.
 
 **Networked games** split players into two roles:
 
@@ -37,6 +37,8 @@ A countdown plays at the start of each game (disable it in Settings if you prefe
 - **Viewer** — sees the current word and gives clues without saying it.
 
 The host picks who the Holder is before each round, so you can rotate roles without reconnecting. The room stays alive across games — after each round the host gets **Play Again**, **Pick Next Holder**, or **Quit**; joiners wait in the stats screen until the host kicks off the next round.
+
+**Auto-rotate Holder** (Settings) replaces the manual flow with a turn-based session: the Holder rotates through every participant in join order, the host sees a single **Ready for next round?** prompt instead of the three-way picker, and a running session total is tracked across rounds. Toggle it off any time to go back to picking manually.
 
 ## Importing Your Own Word Lists
 

@@ -516,7 +516,91 @@ fn center_col(terminal_width: u16, content_width: u16) -> u16 {
     terminal_width.saturating_sub(content_width) / 2
 }
 
-pub fn render_question(word: &str, seconds_left: u64, score: usize, term_size: (u16, u16)) {
+// ─── Low-time warning ────────────────────────────────────────────────
+
+/// Visual state for the low-time warning. When `timer_red` is true the timer
+/// text renders in red; when `border_red` is true a red border is drawn along
+/// the outer edge of the terminal. `border_red` toggles every 500ms for the
+/// 2Hz blink, while `timer_red` stays on continuously during the warning.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct WarningState {
+    pub timer_red: bool,
+    pub border_red: bool,
+}
+
+impl WarningState {
+    pub const OFF: WarningState = WarningState {
+        timer_red: false,
+        border_red: false,
+    };
+
+    /// Build the state from the remaining seconds and the current blink phase.
+    /// When `seconds_left > WARNING_THRESHOLD_SECS` the warning is fully off.
+    pub fn from(seconds_left: u64, blink_on: bool) -> Self {
+        if seconds_left <= crate::timer::WARNING_THRESHOLD_SECS {
+            WarningState {
+                timer_red: true,
+                border_red: blink_on,
+            }
+        } else {
+            WarningState::OFF
+        }
+    }
+}
+
+/// Render a centered timer cell; if `red` is true, color the text red on the
+/// active primary background. Restores the active-scheme colors afterward.
+fn render_timer_cell(text: &str, red: bool) {
+    if red {
+        let bg = theme::active().primary_bg;
+        let _ = queue!(stdout(), SetColors(Colors::new(Red, bg)));
+        print!("{}", text);
+        let _ = queue!(stdout(), SetColors(fg_on_primary()));
+    } else {
+        print!("{}", text);
+    }
+}
+
+/// Draw a red border along the outer edges of the terminal as an overlay. The
+/// inner content has already been drawn; this only touches the four border
+/// rows/columns. No-op unless `state.border_red` is true.
+fn draw_warning_border(state: WarningState, term_size: (u16, u16)) {
+    if !state.border_red {
+        return;
+    }
+    let (tw, th) = term_size;
+    if tw < 2 || th < 2 {
+        return;
+    }
+    let bg = theme::active().primary_bg;
+    let _ = queue!(stdout(), SetColors(Colors::new(Red, bg)));
+
+    let top: String = "═".repeat((tw - 2) as usize);
+    let bottom = top.clone();
+
+    let _ = queue!(stdout(), MoveTo(0, 0));
+    print!("╔{}╗", top);
+
+    for row in 1..th - 1 {
+        let _ = queue!(stdout(), MoveTo(0, row));
+        print!("║");
+        let _ = queue!(stdout(), MoveTo(tw - 1, row));
+        print!("║");
+    }
+
+    let _ = queue!(stdout(), MoveTo(0, th - 1));
+    print!("╚{}╝", bottom);
+
+    let _ = queue!(stdout(), SetColors(fg_on_primary()));
+}
+
+pub fn render_question(
+    word: &str,
+    seconds_left: u64,
+    score: usize,
+    warning: WarningState,
+    term_size: (u16, u16),
+) {
     let (tw, th) = term_size;
     let mid_row = th / 2;
 
@@ -539,9 +623,12 @@ pub fn render_question(word: &str, seconds_left: u64, score: usize, term_size: (
     let _ = queue!(stdout(), MoveTo(col, mid_row + 1));
     print!("│ {} │", word_padded);
     let _ = queue!(stdout(), MoveTo(col, mid_row + 2));
-    print!("│ {} │", timer_padded);
+    print!("│ ");
+    render_timer_cell(&timer_padded, warning.timer_red);
+    print!(" │");
     let _ = queue!(stdout(), MoveTo(col, mid_row + 3));
     print!("└{}┘", box_bottom);
+    draw_warning_border(warning, term_size);
     let _ = stdout().flush();
 }
 
@@ -661,12 +748,18 @@ pub fn render_countdown(term_size: (u16, u16)) {
 /// does not clear it afterward. It's used by solo, host, and joiner flows —
 /// `actions` are the trailing lines below the stats (e.g. `"[P] Play again"`,
 /// `"Press any key to continue..."`, or `"Waiting for host..."`).
+///
+/// `session_tally` is `Some((score, total))` when called from the host in
+/// auto-rotate Holder mode — it adds a "Session: X / Y" row above the missed
+/// words so the running session total is visible across rounds.
+#[allow(clippy::too_many_arguments)]
 pub fn render_game_summary(
     score: usize,
     total_questions: usize,
     missed_words: &[String],
     game_time: u64,
     all_used: bool,
+    session_tally: Option<(usize, usize)>,
     actions: &[&str],
     term_size: (u16, u16),
 ) {
@@ -714,6 +807,14 @@ pub fn render_game_summary(
     ));
     if all_used {
         rows.push((center_row("You cleared the entire list!"), RowKind::Success));
+    }
+
+    if let Some((sess_score, sess_total)) = session_tally {
+        rows.push((String::new(), RowKind::Divider));
+        rows.push((
+            center_row(&format!("Session: {} / {}", sess_score, sess_total)),
+            RowKind::Success,
+        ));
     }
 
     rows.push((String::new(), RowKind::Divider));
@@ -831,7 +932,12 @@ fn build_missed_lines(missed: &[String], width: usize, max_lines: usize) -> Vec<
 
 // ─── Holder view (networked: shows timer + score but NOT the word) ───
 
-pub fn render_holder_view(seconds_left: u64, score: usize, term_size: (u16, u16)) {
+pub fn render_holder_view(
+    seconds_left: u64,
+    score: usize,
+    warning: WarningState,
+    term_size: (u16, u16),
+) {
     let (tw, th) = term_size;
     let mid_row = th / 2;
 
@@ -840,6 +946,7 @@ pub fn render_holder_view(seconds_left: u64, score: usize, term_size: (u16, u16)
     let hint_line = "Press [Y] Correct  [N] Pass";
     let content_width = timer_line.len().max(hint_line.len()).max(placeholder.len()) + 4;
     let box_line: String = "―".repeat(content_width - 2);
+    let timer_padded = format!("{:^width$}", timer_line, width = content_width - 4);
 
     let col = center_col(tw, content_width as u16);
 
@@ -853,11 +960,14 @@ pub fn render_holder_view(seconds_left: u64, score: usize, term_size: (u16, u16)
     let _ = queue!(stdout(), MoveTo(col, mid_row + 1));
     print!("│ {:^width$} │", placeholder, width = content_width - 4);
     let _ = queue!(stdout(), MoveTo(col, mid_row + 2));
-    print!("│ {:^width$} │", timer_line, width = content_width - 4);
+    print!("│ ");
+    render_timer_cell(&timer_padded, warning.timer_red);
+    print!(" │");
     let _ = queue!(stdout(), MoveTo(col, mid_row + 3));
     print!("│ {:^width$} │", hint_line, width = content_width - 4);
     let _ = queue!(stdout(), MoveTo(col, mid_row + 4));
     print!("└{}┘", box_line);
+    draw_warning_border(warning, term_size);
     let _ = stdout().flush();
 }
 

@@ -231,12 +231,13 @@ enum SettingsResult {
 // 2: Last Unlimited
 // 3: Extra Time
 // 4: Bonus Seconds
-// 5: Word List
-// 6: Category
-// 7: Color Scheme
-// 8: Import Word List
-// 9: Back
-const SETTINGS_COUNT: usize = 10;
+// 5: Auto-rotate Holder
+// 6: Word List
+// 7: Category
+// 8: Color Scheme
+// 9: Import Word List
+// 10: Back
+const SETTINGS_COUNT: usize = 11;
 
 fn render_settings_menu(config: &AppConfig, selected: usize, term_size: (u16, u16)) {
     let game_time_val = format!("< {} >", config.game_time);
@@ -256,6 +257,11 @@ fn render_settings_menu(config: &AppConfig, selected: usize, term_size: (u16, u1
         "[ ]".to_string()
     };
     let bonus_val = format!("< {} >", config.bonus_seconds);
+    let rotate_val = if config.auto_rotate_holder {
+        "[x]".to_string()
+    } else {
+        "[ ]".to_string()
+    };
     let word_list_val = config.word_file.clone();
     let cat_val = config.category.as_deref().unwrap_or("All").to_string();
     let scheme_val = crate::theme::by_id(&config.color_scheme).name.to_string();
@@ -280,6 +286,10 @@ fn render_settings_menu(config: &AppConfig, selected: usize, term_size: (u16, u1
         MenuItem::Setting {
             label: "Bonus Seconds:",
             value: &bonus_val,
+        },
+        MenuItem::Setting {
+            label: "Auto-rotate Holder:",
+            value: &rotate_val,
         },
         MenuItem::Setting {
             label: "Word List:",
@@ -324,6 +334,7 @@ async fn run_settings_screen(
                 1 => config.skip_countdown = !config.skip_countdown,
                 2 => config.last_unlimited = !config.last_unlimited,
                 3 => config.extra_time = !config.extra_time,
+                5 => config.auto_rotate_holder = !config.auto_rotate_holder,
                 _ => {}
             },
             KeyCode::Right | KeyCode::Char('l') => match *selected {
@@ -332,6 +343,7 @@ async fn run_settings_screen(
                 1 => config.skip_countdown = !config.skip_countdown,
                 2 => config.last_unlimited = !config.last_unlimited,
                 3 => config.extra_time = !config.extra_time,
+                5 => config.auto_rotate_holder = !config.auto_rotate_holder,
                 _ => {}
             },
             KeyCode::Enter => match *selected {
@@ -355,11 +367,12 @@ async fn run_settings_screen(
                         config.bonus_seconds = val.clamp(1, 30);
                     }
                 }
-                5 => return SettingsResult::OpenWordListPicker,
-                6 => return SettingsResult::OpenCategoryPicker,
-                7 => return SettingsResult::OpenColorSchemePicker,
-                8 => return SettingsResult::OpenImportFlow,
-                9 => return SettingsResult::Back,
+                5 => config.auto_rotate_holder = !config.auto_rotate_holder,
+                6 => return SettingsResult::OpenWordListPicker,
+                7 => return SettingsResult::OpenCategoryPicker,
+                8 => return SettingsResult::OpenColorSchemePicker,
+                9 => return SettingsResult::OpenImportFlow,
+                10 => return SettingsResult::Back,
                 _ => {}
             },
             KeyCode::Esc | KeyCode::Char('q') => return SettingsResult::Back,
