@@ -1,4 +1,4 @@
-[House Stark]
+[Characters]
 Rickard Stark
 Ned Stark
 Catelyn Stark
@@ -10,8 +10,6 @@ Rickon Stark
 Jon Snow
 Benjen Stark
 Lyanna Stark
-
-[House Lannister]
 Tytos Lannister
 Tywin Lannister
 Joanna Lannister
@@ -21,8 +19,6 @@ Jamie Lannister
 Tyrion Lannister
 Lancel Lannister
 Cersei Lannister
-
-[House Baratheon]
 Robert Baratheon
 Stannis Baratheon
 Renly Baratheon
@@ -32,36 +28,26 @@ Myrcella Baratheon
 Shireen Baratheon
 Edric Storm
 Gendry
-
-[House Tyrell]
 Olenna Tyrell
 Mace Tyrell
 Margery Tyrell
 Loras Tyrell
 Willis Tyrell
 Garlan Tyrell
-
-[House Tully]
 Hoster Tully
 Edmure Tully
 The Blackfish
-
-[House Martell]
 Oberyn Martell
 Doran Martell
 Arianne Martell
 Ellaria Sand
 Elia Martell
-
-[House Greyjoy]
 Balon Greyjoy
 Asha Greyjoy
 Theon Greyjoy
 Euron Greyjoy
 Victarion Greyjoy
 Aeron Greyjoy (damp hair)
-
-[House Targaryen]
 Daenerys Targaryen
 Khal Drogo
 Aerys Targaryen
@@ -75,13 +61,10 @@ Aemond Targaryen
 Aemon Targaryen (maester)
 Aegon II
 Maegor the Cruel
-
-[House Bolton]
+Aegon V (Egg)
 Roose Bolton
 Ramsey Bolton
 Reek
-
-[Northern Houses]
 Greatjon Umber
 Rickard Karstark
 Maege Mormont
@@ -89,21 +72,15 @@ Lyanna Mormont
 Wyman Manderly
 Alice Karstark
 Barbrey Dustin
-
-[House Frey]
 Walder Frey
 Roselyn Frey
 Fat Walda
 Cleos Frey
 Black Walder
 Rhaeger Frey
-
-[House Tarly]
 Samwell Tarly
 Randall Tarly
 Dickon Tarly
-
-[Kingsguard & Knights]
 Barristan Selmy
 Meryn Trant
 Mandon Moore
@@ -114,15 +91,11 @@ Duncan the Tall
 Brienne of Tarth
 The Smiling Knight
 The Gravedigger
-
-[Small Council & Spies]
 Varys
 Illyrio Mopatis
 Littlefinger
 Maester Pycelle
 Qyburn
-
-[Night's Watch]
 Alliser Thorne
 Bowen Marsh
 Jeor Mormont
@@ -134,8 +107,6 @@ Janos Slynt
 Donal Noye
 Cotter Pyke
 Denys Mallister
-
-[Wildlings]
 Craster
 Gilly
 Val
@@ -147,14 +118,10 @@ Mance Rayder
 Ygritte
 Tormund Giantsbane
 Mag the Mighty
-
-[Brotherhood Without Banners]
 Thoros
 Berric Dondarian
 Anguy
 Lem LemonCloak
-
-[Essos Characters]
 Mirri Maz Duur
 Xaro Xhoan Daxos
 Pyat Pree
@@ -171,38 +138,13 @@ Jaqen H'ghar
 Salladhor Saan
 Pate
 The Alchemist
-
-[Crannogmen]
 Howland Reed
 Jojen Reed
 Meera Reed
-
-[Religion]
 The High Sparrow
 Melisandre
-Azor Ahai
-The Drowned God
-R'hllor
-Faith of the Seven
-The Old Gods
 Moqorro
-
-[Historical & Legendary]
-Bran the Builder
-Brynden Rivers
-Bittersteel
-Shiera Seastar
 Coldhands
-The Night's King
-The Rat Cook
-Quentyn Ball
-Daemon Blackfyre
-Maelys the Monstrous
-Lyonel Strong
-Corlys Velaryon
-Alicent Hightower
-
-[Miscellaneous Characters]
 Sandor Clegane
 Gregor Clegane
 Podrick Payne
@@ -252,16 +194,12 @@ Septa Lamore
 Gerris Drinkwater
 Oppo
 Haldon Half-Maester
-
-[Direwolves]
 Summer
 Ghost
 Shaggydog
 Grey Wind
 Nymeria
 Lady
-
-[Dragons]
 Viseryon
 Rhaegal
 Drogon
@@ -278,7 +216,7 @@ Vermithor
 Moondancer
 Vermax
 
-[Valyrian Steel & Weapons]
+[Weapons & Artifacts]
 Widows Wail
 Oathkeeper
 Darksister
@@ -289,7 +227,7 @@ Longclaw
 Brightroar
 Lightbringer
 
-[Regions of Westeros]
+[Places]
 Westeros
 Dorne
 The Reach
@@ -299,8 +237,6 @@ The Crownlands
 The North
 The Riverlands
 The Iron Islands
-
-[Castles & Strongholds]
 Winterfell
 Casterly Rock
 High Garden
@@ -331,8 +267,6 @@ Summerhall
 The Red Keep
 Craster's keep
 Saltpans
-
-[Notable Places]
 The Arbor
 The Neck
 Bear Island
@@ -365,8 +299,6 @@ Torrhen's square
 White Harbor
 Greywater Watch
 The Moon Door
-
-[Cities of Essos]
 Essos
 Bravos
 Pentos
@@ -387,9 +319,9 @@ Yeen
 Yi Ti
 Asshai
 Ib
+The Stinking Goose
 
-[Organizations]
-The Valaryons
+[Culture]
 The Second Sons
 The Unsullied
 The Brave Companions
@@ -397,17 +329,31 @@ The Brotherhood Without Banners
 The Golden Company
 The Iron Bank
 Sons of the Harpy
-
-[Drinks]
+Azor Ahai
+The Drowned God
+R'hllor
+Faith of the Seven
+The Old Gods
 Arbor Gold
 Dornish Red
 Hippocras
 Dreamwine
 Milk of the Poppy
 Shade of the Evening
-The Stinking Goose
 
-[Theories & Tinfoil]
+[Lore & Legends]
+Bran the Builder
+Brynden Rivers
+Bittersteel
+Shiera Seastar
+The Night's King
+The Rat Cook
+Quentyn Ball
+Daemon Blackfyre
+Maelys the Monstrous
+Lyonel Strong
+Corlys Velaryon
+Alicent Hightower
 Jojen Paste
 R+L=J
 HR=HS
@@ -416,5 +362,4 @@ Varus is a woman
 Knight of the Laughing Tree
 Bolt-On
 Varys is a Merman
-Egg
 Battle of the Blackwater

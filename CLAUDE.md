@@ -176,7 +176,7 @@ Violating this rule means lost work, broken workflows, and angry maintainers. **
 
 ## Word List
 
-`lists/ASOIAF_list.txt` — 420 entries across 25 categories (House Stark, Dragons, Valyrian Steel, Theories, etc.). Additional `.txt` files in `lists/` are discovered automatically and appear in the in-game Word List picker. Format:
+`lists/ASOIAF_list.txt` — 356 entries across 5 broad categories (Characters, Weapons & Artifacts, Places, Culture, Lore & Legends). Additional `.txt` files in `lists/` are discovered automatically and appear in the in-game Word List picker. Format:
 
 ```
 [Category Name]

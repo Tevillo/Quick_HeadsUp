@@ -157,7 +157,7 @@ In text input fields (server address, room code), type normally. `Enter` confirm
 
 ## Word List Format
 
-The included list (`lists/ASOIAF_list.txt`) has 420+ entries across 25 categories. Custom word files use the same format:
+The included list (`lists/ASOIAF_list.txt`) has 356 entries across 5 broad categories (Characters, Weapons & Artifacts, Places, Culture, Lore & Legends). Custom word files use the same format:
 
 ```
 [Category Name]
@@ -201,7 +201,7 @@ Dedup is case-insensitive and applied globally across categories (first-occurren
 - **Live timer and score** — updated every second
 - **End-of-round summary** — score, accuracy %, pace, and missed words shown inside the TUI for solo, host, and joiner (missed words truncate with `...and N more` when the list is long)
 - **Game history** — results saved to `.history/history.json` in the install directory
-- **Category filtering** — scrollable picker with all 25 categories
+- **Category filtering** — scrollable picker with all 5 categories
 - **Color schemes** — 12 truecolor palettes (Classic, Pastel, Beige, and one for each of the nine ASOIAF great houses — Stark, Lannister, Tyrell, Martell, Greyjoy, Targaryen, Baratheon, Arryn, Tully). House Stark is the default. Pick one from **Settings → Color Scheme** — a live preview panel to the right of the list renders sample UI elements (menu, selected item, summary, error) in the hovered scheme's palette. Press Enter to keep it or Esc to cancel. Your terminal must support 24-bit color.
 - **Multi-player rooms** — 1 host + up to 8 joiners via relay server
 - **Holder selection** — host picks who holds the device from a participant list
