@@ -12,6 +12,10 @@ Press `q` any time to quit. The terminal always restores cleanly, even on Ctrl+C
 
 For networked play the `guess_up` client and the `relay` server must be built from the same crate version. The client sends a version handshake on connect; the relay rejects any mismatch with an inline error, so both sides need to be upgraded together.
 
+## Importing Your Own Word Lists
+
+Drop a source file into the `imports/` directory next to the binary (created automatically on first launch) and run **Settings → Import Word List**. Supported formats: `.csv`, `.tsv`, `.json` (shape `{ "Category": ["word", ...] }`), and plain newline-separated `.txt`. 1-column sources land under a single `General` category; 2-column CSV/TSV pick the word column automatically when the header is `word`/`name`/`entry`/`term`. If the layout isn't auto-resolvable — 2 columns with unrecognized headers, or 3+ columns — you pick the word column and then the category column (with a **None → [General]** option). The converted list lands in `lists/` and shows up in the Word List picker immediately — see [ARCHITECTURE.md — Importing Word Lists](ARCHITECTURE.md#importing-word-lists) for the full flow.
+
 ---
 ### Build From Source
 

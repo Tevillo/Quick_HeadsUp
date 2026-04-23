@@ -21,6 +21,10 @@ pub fn lists_dir() -> io::Result<PathBuf> {
     Ok(install_dir()?.join("lists"))
 }
 
+pub fn imports_dir() -> io::Result<PathBuf> {
+    Ok(install_dir()?.join("imports"))
+}
+
 pub fn config_path() -> io::Result<PathBuf> {
     Ok(install_dir()?.join(".guess_up_config.json"))
 }
@@ -80,4 +84,35 @@ pub fn list_available_lists() -> io::Result<Vec<String>> {
 
 pub fn word_file_path(filename: &str) -> io::Result<PathBuf> {
     Ok(lists_dir()?.join(filename))
+}
+
+/// Create `imports/` if it doesn't exist and return its path. Unlike
+/// `.history/`, this directory is visible — users drop source files into
+/// it, so it mustn't be hidden.
+pub fn ensure_imports_dir() -> io::Result<PathBuf> {
+    let dir = imports_dir()?;
+    fs::create_dir_all(&dir)?;
+    Ok(dir)
+}
+
+/// Sorted filenames in `imports/` — every regular file regardless of
+/// extension. `detect_format` decides at convert time whether a given
+/// extension is supported; filtering here would hide unsupported drops
+/// from the user.
+pub fn list_available_imports() -> io::Result<Vec<String>> {
+    let dir = ensure_imports_dir()?;
+    let entries = fs::read_dir(&dir)?;
+    let mut out: Vec<String> = entries
+        .filter_map(|e| e.ok())
+        .filter_map(|e| {
+            let p = e.path();
+            if p.is_file() {
+                p.file_name().and_then(|s| s.to_str()).map(String::from)
+            } else {
+                None
+            }
+        })
+        .collect();
+    out.sort();
+    Ok(out)
 }

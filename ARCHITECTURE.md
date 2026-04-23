@@ -11,12 +11,13 @@ The `guess_up` binary is self-contained and expects two siblings in its director
   guess_up                  # the binary
   lists/                    # one or more .txt word lists (required)
     ASOIAF_list.txt
+  imports/                  # drop-in dir for the Import Word List flow (auto-created on first use)
   .history/                 # created automatically on first game
     history.json
   .guess_up_config.json     # created automatically on first save
 ```
 
-Drop additional `.txt` files into `lists/` and they show up in the in-game **Word List** picker.
+Drop additional `.txt` files into `lists/` and they show up in the in-game **Word List** picker. To turn a CSV/TSV/JSON source into a `lists/`-compatible file without leaving the TUI, drop it into `imports/` and use **Settings → Import Word List** (see below).
 
 When you run via `cargo run -p guess_up`, the build script copies the repo's `lists/` directory into `target/{debug,release}/` alongside the binary, so everything works out of the box. For release installs, copy the `guess_up` binary together with the `lists/` directory to wherever you want to run it. User config (`.guess_up_config.json`) is created next to the binary on first save.
 
@@ -169,6 +170,28 @@ Entry Three
 
 Lines are trimmed and deduplicated automatically.
 
+## Importing Word Lists
+
+The TUI can convert external data files into the `lists/` format without leaving the game. Drop a source file into `imports/` (next to the binary — created automatically on first launch) and open **Settings → Import Word List**.
+
+**Supported formats:**
+
+| Format | Expected shape |
+|--------|----------------|
+| `.txt` | Newline-separated words; everything lands under a single `General` category |
+| `.csv` / `.tsv` | One or more columns, first row is the header. Word column is auto-detected when the 2-column header is `word`, `name`, `entry`, or `term` (case-insensitive). Any layout that isn't auto-resolvable — 2 columns with unrecognized headers, or 3+ columns — prompts the user to pick the word column and then the category column. Fields may be wrapped in matched double quotes |
+| `.json` | An object mapping category names to string arrays: `{ "Category A": ["word1", "word2"], "Category B": [...] }`. Any other JSON shape is rejected with a clean error |
+
+**Flow:**
+
+1. **Source picker** — pick a file from `imports/`. Every file is listed regardless of extension, so unrecognized formats still surface and produce a clear error at convert time rather than silently disappearing.
+2. **Column pickers** — when the layout can't be auto-resolved, you pick the word column first, then the category column. The category picker always offers a **None — put everything under [General]** option, so a source with no category dimension (or one you'd rather flatten) still imports cleanly.
+3. **Output filename** — defaults to the source stem with `.txt` appended. `.txt` is auto-appended if you omit it. Empty names and filenames containing `/`, `\`, or null bytes are rejected.
+4. **Conflict resolution** — if the target already exists in `lists/`, pick **Overwrite**, **Use auto-suffix** (`<name>_1.txt`, `<name>_2.txt`, …), or **Cancel**.
+5. **Result** — the converted list is written into `lists/` and you're shown an entry + category count. The new list appears in the existing Word List picker immediately; the active word list is never changed automatically.
+
+Dedup is case-insensitive and applied globally across categories (first-occurrence wins), matching how `load_words` treats existing `.txt` lists. Empty categories and rows with missing word cells are silently dropped. Parsing is pure, in-memory, and unit-tested (`cargo test -p guess_up converter::`).
+
 ## Game Features
 
 - **Interactive TUI menu** — configure all settings from the game, no CLI flags needed
@@ -211,8 +234,10 @@ Network Task (TCP via relay)       ---> tx --+  (networked mode only)
 |--------|---------------|
 | `main.rs` | Word loading, startup validation of `lists/`, game runners (solo/host/join), entry point |
 | `config.rs` | `AppConfig` — persistent settings, load/save `.guess_up_config.json` next to the binary |
-| `paths.rs` | Install-layout path resolution (binary dir, `lists/`, `.history/`) — single source of truth |
+| `paths.rs` | Install-layout path resolution (binary dir, `lists/`, `imports/`, `.history/`) — single source of truth |
 | `menu.rs` | TUI menu system — main menu, settings, word list picker, category picker, server connect, room code screens |
+| `converter.rs` | Pure-logic word-list converter — CSV/TSV/JSON/plain-text parsers + deterministic emitter; fully unit-tested |
+| `converter_menu.rs` | TUI flow for Settings → Import Word List (source picker, column picker, output name prompt, conflict resolution, result screen) |
 | `list_menu.rs` | Shared `ListState` + `classify_key` helpers used by list-style screens (main menu, pickers, holder/post-game menus) |
 | `types.rs` | Event types, game config, result structs |
 | `game.rs` | Game state, main loop (solo + host), remote game loop |
