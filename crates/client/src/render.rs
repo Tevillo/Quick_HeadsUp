@@ -925,3 +925,27 @@ pub fn render_error(msg: &str, term_size: (u16, u16)) {
     let lines = ["ERROR", "", msg, "", "Press any key to continue..."];
     render_centered_box(&lines, term_size, error_panel());
 }
+
+/// Result screen for the word-list import flow. Handles both success and
+/// failure — callers pass `success=true` for the imported-OK message and
+/// `success=false` for any error (parse failure, filesystem error, or
+/// empty imports dir).
+pub fn render_import_result(msg: &str, success: bool, term_size: (u16, u16)) {
+    let title = if success {
+        "IMPORT COMPLETE"
+    } else {
+        "IMPORT ERROR"
+    };
+    let colors = if success {
+        fg_on_primary()
+    } else {
+        error_panel()
+    };
+    // Split msg on newlines so a multi-line message (e.g. "prefix\npath")
+    // renders each line on its own row inside the box.
+    let mut lines: Vec<&str> = vec![title, ""];
+    lines.extend(msg.split('\n'));
+    lines.push("");
+    lines.push("Press any key to return...");
+    render_centered_box(&lines, term_size, colors);
+}

@@ -113,6 +113,11 @@ pub async fn menu_loop(config: &mut AppConfig) {
                         screen = Screen::Settings;
                         continue;
                     }
+                    SettingsResult::OpenImportFlow => {
+                        crate::converter_menu::run_import_flow(&mut reader).await;
+                        screen = Screen::Settings;
+                        continue;
+                    }
                 }
             }
         }
@@ -217,6 +222,7 @@ enum SettingsResult {
     OpenCategoryPicker,
     OpenWordListPicker,
     OpenColorSchemePicker,
+    OpenImportFlow,
 }
 
 // Settings items indexed as selectable items:
@@ -228,8 +234,9 @@ enum SettingsResult {
 // 5: Word List
 // 6: Category
 // 7: Color Scheme
-// 8: Back
-const SETTINGS_COUNT: usize = 9;
+// 8: Import Word List
+// 9: Back
+const SETTINGS_COUNT: usize = 10;
 
 fn render_settings_menu(config: &AppConfig, selected: usize, term_size: (u16, u16)) {
     let game_time_val = format!("< {} >", config.game_time);
@@ -286,6 +293,7 @@ fn render_settings_menu(config: &AppConfig, selected: usize, term_size: (u16, u1
             label: "Color Scheme:",
             value: &scheme_val,
         },
+        MenuItem::Action("Import Word List"),
         MenuItem::Action("Back"),
     ];
     render::render_menu("SETTINGS", &items, selected, term_size);
@@ -350,7 +358,8 @@ async fn run_settings_screen(
                 5 => return SettingsResult::OpenWordListPicker,
                 6 => return SettingsResult::OpenCategoryPicker,
                 7 => return SettingsResult::OpenColorSchemePicker,
-                8 => return SettingsResult::Back,
+                8 => return SettingsResult::OpenImportFlow,
+                9 => return SettingsResult::Back,
                 _ => {}
             },
             KeyCode::Esc | KeyCode::Char('q') => return SettingsResult::Back,
@@ -643,6 +652,9 @@ pub async fn run_settings_inline(config: &mut AppConfig, reader: &mut EventStrea
             }
             SettingsResult::OpenColorSchemePicker => {
                 run_color_scheme_picker(config, reader).await;
+            }
+            SettingsResult::OpenImportFlow => {
+                crate::converter_menu::run_import_flow(reader).await;
             }
         }
     }

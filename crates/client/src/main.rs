@@ -1,4 +1,6 @@
 mod config;
+mod converter;
+mod converter_menu;
 mod game;
 mod input;
 mod list_menu;
