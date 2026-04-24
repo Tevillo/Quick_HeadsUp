@@ -1,5 +1,7 @@
 # Guess Up! — ASOIAF Edition
 
+**v1.2.0**
+
 A terminal-based "Heads Up" party game, themed around *A Song of Ice and Fire*. 
 
 Play solo with friends in the same room, or get up to 9 people across the internet into the same game through a relay server (1 host + 8 joiners).
